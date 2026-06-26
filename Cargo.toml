@@ -1,0 +1,11 @@
+[package]
+name = "ratlang"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+thiserror = "1.0"
+
+[[test]]
+name = "integration"
+path = "tests/integration_test.rs"
