@@ -1,10 +1,10 @@
 use crate::common::span::Span;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TokenKind {
-    LeftParen, // (
-    RightParen,// )
-    LeftBrace, // {
-    RightBrace,// }
+    LeftParen,  // (
+    RightParen, // )
+    LeftBrace,  // {
+    RightBrace, // }
     Comma,      // ,
     Dot,        // .
     Minus,      //-
@@ -18,20 +18,19 @@ pub enum TokenKind {
     Colon,      // :
 
     // One or two character tokens.
-    RightBracket,// ]
-    LeftBracket, // [
+    RightBracket, // ]
+    LeftBracket,  // [
     Bang,         // !
     BangEqual,    // !=
     Equal,        // =
-    EqualEqual,  //==
+    EqualEqual,   //==
     Greater,      // >
-    GreaterEqual,//>=
+    GreaterEqual, //>=
     Less,         //<
-    LessEqual,   //<=
+    LessEqual,    //<=
     Arrow,        // ->
-    MinusMinus,  //--
-    PlusPlus,    //++
-
+    MinusMinus,   //--
+    PlusPlus,     //++
 
     // Literals.
     Identifier,
@@ -39,7 +38,6 @@ pub enum TokenKind {
     StringLiteral,
     IntLiteral,
     FloatLiteral,
-
 
     // Keywords.
     // logic operators
@@ -73,7 +71,7 @@ pub enum TokenKind {
     Continue,
     // type
     Int,
-    Double,
+    Float,
     Bool,
     Char,
     Str,
@@ -82,10 +80,10 @@ pub enum TokenKind {
     Error,
 }
 
-
 #[derive(Debug, Clone)]
 pub struct Token {
     pub kind: TokenKind,
     pub span: Span,
     pub lexeme: String,
 }
+

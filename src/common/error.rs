@@ -21,7 +21,7 @@ pub struct Diagnostic {
     pub message: String,
     pub primary_label: Option<Label>, // figure out primiary issue
     pub secondary_labels: Vec<Label>, // other related issues
-    pub notes: Vec<String>, // additional notes like help
+    pub notes: Vec<String>,           // additional notes like help
 }
 
 #[derive(Debug)]
@@ -76,3 +76,4 @@ impl DiagnosticBuilder {
         self.diag
     }
 }
+

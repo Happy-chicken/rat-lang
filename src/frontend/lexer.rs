@@ -1,10 +1,10 @@
 pub mod token;
 // frontend/lexer.rs
-use std::str::Chars;
-use std::iter::Peekable;
 use crate::common::span::{BytePos, Span};
 use crate::frontend::lexer::token::{Token, TokenKind};
 use phf::phf_map;
+use std::iter::Peekable;
+use std::str::Chars;
 
 static KEYWORDS: phf::Map<&'static str, TokenKind> = phf_map! {
     "and" => TokenKind::And,
@@ -33,22 +33,25 @@ static KEYWORDS: phf::Map<&'static str, TokenKind> = phf_map! {
     "ref" => TokenKind::Ref,
 
     "int" => TokenKind::Int,
-    "double" => TokenKind::Double,
+    "double" => TokenKind::Float,
     "bool" => TokenKind::Bool,
     "char" => TokenKind::Char,
     "str" => TokenKind::Str,
 
-    
+
 };
 
 fn is_keyword(ident: &str) -> TokenKind {
-    KEYWORDS.get(ident).copied().unwrap_or(TokenKind::Identifier)
+    KEYWORDS
+        .get(ident)
+        .copied()
+        .unwrap_or(TokenKind::Identifier)
 }
 pub struct Lexer<'a> {
     src: &'a str,
     chars: Peekable<Chars<'a>>,
-    pos: usize,             // 当前字节偏移
-    token_start: usize,     // 当前 token 起始偏移
+    pos: usize,         // 当前字节偏移
+    token_start: usize, // 当前 token 起始偏移
 }
 
 impl<'a> Lexer<'a> {
@@ -127,11 +130,13 @@ impl<'a> Lexer<'a> {
         self.token_start = self.pos;
         let ch = match self.bump() {
             Some(c) => c,
-            None => return Token {
-                kind: TokenKind::TokenEOF,
-                span: Span::new(BytePos(self.pos), BytePos(self.pos)),
-                lexeme: String::new(),
-            },
+            None => {
+                return Token {
+                    kind: TokenKind::TokenEOF,
+                    span: Span::new(BytePos(self.pos), BytePos(self.pos)),
+                    lexeme: String::new(),
+                };
+            }
         };
 
         match ch {
@@ -294,7 +299,7 @@ impl<'a> Lexer<'a> {
                     kind: TokenKind::Error,
                     span: self.span(),
                     lexeme: String::new(),
-                }
+                };
             }
         };
         if self.peek() == Some('\'') {
@@ -344,3 +349,4 @@ impl<'a> Iterator for Lexer<'a> {
         }
     }
 }
+

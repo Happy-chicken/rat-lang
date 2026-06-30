@@ -6,6 +6,12 @@ use std::sync::Arc;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct BytePos(pub usize);
 
+impl From<usize> for BytePos {
+    fn from(value: usize) -> Self {
+        BytePos(value)
+    }
+}
+
 /// 源码中的连续区域。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Span {
