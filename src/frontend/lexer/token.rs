@@ -75,6 +75,8 @@ pub enum TokenKind {
     Bool,
     Char,
     Str,
+    // list
+    List,
 
     TokenEOF,
     Error,

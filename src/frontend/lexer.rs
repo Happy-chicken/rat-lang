@@ -33,10 +33,12 @@ static KEYWORDS: phf::Map<&'static str, TokenKind> = phf_map! {
     "ref" => TokenKind::Ref,
 
     "int" => TokenKind::Int,
-    "double" => TokenKind::Float,
+    "float" => TokenKind::Float,
     "bool" => TokenKind::Bool,
     "char" => TokenKind::Char,
     "str" => TokenKind::Str,
+
+    "list" => TokenKind::List,
 
 
 };

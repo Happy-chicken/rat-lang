@@ -29,8 +29,8 @@ impl SourceFile {
             .unwrap_or_else(|i| i.saturating_sub(1));
         let col = offset - self.line_starts[line];
         Location {
-            line: line + 1,
-            col: col + 1,
+            line: line,
+            col: col,
         }
     }
 

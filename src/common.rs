@@ -34,12 +34,12 @@ impl DiagCtxt {
     }
 
     /// 快捷创建错误并直接提交（常用于解析阶段）。
-    pub fn struct_span_err(&mut self, span: crate::common::span::Span, msg: impl Into<String>) -> DiagnosticBuilder {
+    pub fn error(& mut self, span: crate::common::span::Span, msg: impl Into<String>) -> DiagnosticBuilder {
         // 返回 builder，用户附加信息后手动调用 build 并 emit
         DiagnosticBuilder::new(Level::Error, msg).span(span)
     }
 
-    pub fn struct_warn(&mut self, msg: impl Into<String>) -> DiagnosticBuilder {
+    pub fn warn(&mut self, msg: impl Into<String>) -> DiagnosticBuilder {
         DiagnosticBuilder::new(Level::Warning, msg)
     }
 
@@ -83,11 +83,11 @@ impl DiagCtxt {
         writeln!(writer, "  --> {}:{}:{}", file.name, loc_lo.line, loc_lo.col)?;
         if let Some(line) = file.get_line(loc_lo.line) {
             writeln!(writer, "   |")?;
-            writeln!(writer, " {} | {}", loc_lo.line, line)?;
+            writeln!(writer, "   | {}",  line)?;
             // 下划线标注
-            let start = loc_lo.col - 1;
+            let start = loc_lo.col ;
             let end = if loc_lo.line == loc_hi.line {
-                loc_hi.col - 1
+                loc_hi.col 
             } else {
                 line.len()
             };

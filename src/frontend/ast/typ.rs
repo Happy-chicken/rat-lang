@@ -4,6 +4,7 @@ pub enum Type {
     Float,
     Bool,
     Char,
+    Str,
 
     Void,
     List(Box<Type>),

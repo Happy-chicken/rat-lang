@@ -32,6 +32,12 @@ impl Span {
     }
 }
 
+impl std::fmt::Display for Span {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}:{}", self.low.0, self.high.0) // 或转换成行列号
+    }
+}
+
 /// 带跨度的值。
 #[derive(Debug, Clone)]
 pub struct Spanned<T> {
