@@ -53,7 +53,7 @@ impl AstPrint for crate::frontend::ast::stmt::Stmt {
             Stmt::VarDef { name, ty, init } => {
                 write!(output, "{}{}VarDef({}: {:?}", prefix, branch_str, name, ty)?;
                 if let Some(init) = init {
-                    writeln!(output, ") =")?;
+                    writeln!(output, ") with init")?;
                     init.print(&next_prefix(prefix, is_last), true, output)?;
                 } else {
                     writeln!(output, ")")?;

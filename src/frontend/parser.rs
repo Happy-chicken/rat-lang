@@ -159,7 +159,7 @@ impl<'a, 'diag> Parser<'a, 'diag> {
 
     fn parse_equality(&mut self) -> ExprNode {
         // 解析相等表达式
-        let expr = self.parse_comparison();
+        let mut expr = self.parse_comparison();
         while self.check(TokenKind::EqualEqual) || self.check(TokenKind::BangEqual) {
             let op = self.advance().unwrap(); // consume '==' or '!='
             let right = self.parse_comparison();
@@ -168,7 +168,7 @@ impl<'a, 'diag> Parser<'a, 'diag> {
                 TokenKind::BangEqual => BinaryOp::NotEq,
                 _ => unreachable!(),
             };
-            return  ExprNode {
+            expr = ExprNode {
                 span: expr.span.merge(right.span),
                 expr: Expr::Binary {
                     op: kind,
@@ -182,7 +182,7 @@ impl<'a, 'diag> Parser<'a, 'diag> {
 
     fn parse_comparison(&mut self) -> ExprNode {
         // 解析比较表达式
-        let expr = self.parse_term();
+        let mut expr = self.parse_term();
         while self.check(TokenKind::Less) || self.check(TokenKind::Greater) {
             let op = self.advance().unwrap(); // consume '<' or '>'
             let right = self.parse_term();
@@ -191,7 +191,7 @@ impl<'a, 'diag> Parser<'a, 'diag> {
                 TokenKind::Greater => BinaryOp::Gt,
                 _ => unreachable!(),
             };
-            return ExprNode {
+            expr = ExprNode {
                 span: expr.span.merge(right.span),
                 expr: Expr::Binary {
                     op: kind,
@@ -205,7 +205,7 @@ impl<'a, 'diag> Parser<'a, 'diag> {
 
     fn parse_term(&mut self) -> ExprNode {
         // 解析加减表达式
-        let expr = self.parse_factor();
+        let mut expr = self.parse_factor();
         while self.check(TokenKind::Plus) || self.check(TokenKind::Minus) {
             let op = self.advance().unwrap(); // consume '+' or '-'
             let right = self.parse_factor();
@@ -214,7 +214,7 @@ impl<'a, 'diag> Parser<'a, 'diag> {
                 TokenKind::Minus => BinaryOp::Sub,
                 _ => unreachable!(),    
             };
-            return ExprNode {
+            expr = ExprNode {
                 span: expr.span.merge(right.span),
                 expr: Expr::Binary {
                     op: kind,
@@ -228,7 +228,7 @@ impl<'a, 'diag> Parser<'a, 'diag> {
 
     fn parse_factor(&mut self) -> ExprNode {
         // 解析乘除表达式
-        let expr = self.parse_unary();
+        let mut expr = self.parse_unary();
         while self.check(TokenKind::Star) || self.check(TokenKind::Slash) {
             let op = self.advance().unwrap(); // consume '*' or '/'
             let right = self.parse_unary();
@@ -237,7 +237,7 @@ impl<'a, 'diag> Parser<'a, 'diag> {
                 TokenKind::Slash => BinaryOp::Div,
                 _ => unreachable!(),
             };
-            return ExprNode {
+            expr = ExprNode {
                 span: expr.span.merge(right.span),
                 expr: Expr::Binary {
                     op: kind,

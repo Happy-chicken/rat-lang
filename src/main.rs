@@ -10,10 +10,11 @@ fn main() {
     return a+b;
 }
 def main() { 
-    var x:int = 42;
+    var b:bool = 1 < 2 > 3;
+    var x:int = 42 + (1 + 2) * 3;
     var y:float = 3.14;
     var z:str = "Hello, world!";
-    var mylist:list<int> = [1, 2, 3, 4, 5];
+    var mylist:list<list<int>> = [1, 2, 3, 4, 5];
     return x;
 }
     "#;
