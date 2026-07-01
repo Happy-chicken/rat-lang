@@ -6,8 +6,14 @@ use frontend::lexer::Lexer;
 use frontend::parser::Parser;
 use crate::frontend::ast::printer::AstPrint;
 fn main() {
-    let src = r#" def add(a:int, b:int)->int {
-    return a+b;
+    let src = r#" 
+def add(a:int, b:int)->int {
+    if (a > b) {
+        a = a + b;
+    } else {
+        a = a - b;
+    }
+    return a;
 }
 def main() { 
     var b:bool = 1 < 2 > 3;
@@ -18,7 +24,7 @@ def main() {
     return x;
 }
     "#;
-    let file = SourceFile::new("main.rs".to_string(), src.to_string());
+    let file = SourceFile::new("main.rat".to_string(), src.to_string());
     let mut diag_ctxt = DiagCtxt::new();
     diag_ctxt.add_file(file.clone());
 
@@ -29,5 +35,6 @@ def main() {
     ast.print("", true, &mut output).unwrap();
     println!("{}", output);
     diag_ctxt.print_all(&mut std::io::stdout()).expect("");
+    // print!("{:#?}", ast);
 }
     

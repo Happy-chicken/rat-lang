@@ -17,8 +17,8 @@ pub enum Stmt {
 
     If {
         condition: ExprNode,
-        then_brach: Block,
-        elif_brach: Vec<(ExprNode, Stmt)>,
+        then_branch: Block,
+        elif_branch: Vec<(ExprNode, Block)>,
         else_branch: Block,
     },
     Loop {
@@ -33,7 +33,7 @@ pub enum Stmt {
 }
 
 // ---- Block ----
-impl AstPrint for crate::frontend::ast::stmt::Block {
+impl AstPrint for Block {
     fn print(&self, prefix: &str, is_last: bool, output: &mut impl Write) -> std::fmt::Result {
         writeln!(output, "{}└──Block", prefix)?;
         let child_prefix = next_prefix(prefix, is_last);
@@ -46,7 +46,7 @@ impl AstPrint for crate::frontend::ast::stmt::Block {
 }
 
 // ---- Stmt ----
-impl AstPrint for crate::frontend::ast::stmt::Stmt {
+impl AstPrint for Stmt {
     fn print(&self, prefix: &str, is_last: bool, output: &mut impl Write) -> std::fmt::Result {
         let branch_str = branch(is_last);
         match self {
@@ -61,8 +61,8 @@ impl AstPrint for crate::frontend::ast::stmt::Stmt {
             }
             Stmt::If {
                 condition,
-                then_brach,
-                elif_brach,
+                then_branch,
+                elif_branch,
                 else_branch,
             } => {
                 writeln!(output, "{}{}If", prefix, branch_str)?;
@@ -74,12 +74,12 @@ impl AstPrint for crate::frontend::ast::stmt::Stmt {
 
                 // then branch
                 writeln!(output, "{}├── Then:", child)?;
-                let has_elif_or_else = !elif_brach.is_empty() || !else_branch.stmts.is_empty();
-                then_brach.print(&format!("{}{}", child, if has_elif_or_else { "│   " } else { "    " }), true, output)?;
+                let has_elif_or_else = !elif_branch.is_empty() || !else_branch.stmts.is_empty();
+                then_branch.print(&format!("{}{}", child, if has_elif_or_else { "│   " } else { "    " }), true, output)?;
 
                 // elif branches
-                let elif_count = elif_brach.len();
-                for (i, (cond, stmt)) in elif_brach.iter().enumerate() {
+                let elif_count = elif_branch.len();
+                for (i, (cond, stmt)) in elif_branch.iter().enumerate() {
                     writeln!(output, "{}├── Elif:", child)?;
                     let is_last_elif = i == elif_count - 1 && else_branch.stmts.is_empty();
                     let next = format!("{}{}", child, if is_last_elif { "    " } else { "│   " });
@@ -103,9 +103,11 @@ impl AstPrint for crate::frontend::ast::stmt::Stmt {
                 body.print(&format!("{}    ", child), true, output)?;
             }
             Stmt::ExprStmt(expr) => {
-                write!(output, "{}{}ExprStmt: ", prefix, branch_str)?;
+                writeln!(output, "{}{}ExprStmt: ", prefix, branch_str)?;
+                let child = next_prefix(prefix, is_last);
                 // 简单地在一行内显示简短表达式，也可递归；这里选择内联简化
-                writeln!(output, "{}", expr_to_string(expr))?;
+                expr.print(&child, true, output)?;
+                // writeln!(output, "{}", expr_to_string(expr))?;
             }
             Stmt::Return(expr) => {
                 write!(output, "{}{}Return", prefix, branch_str)?;
@@ -125,14 +127,4 @@ impl AstPrint for crate::frontend::ast::stmt::Stmt {
         }
         Ok(())
     }
-}
-
-/// 简单的表达式内联字符串（用于 ExprStmt 快速显示），也可直接复用 print。
-fn expr_to_string(expr: &ExprNode) -> String {
-    // 为了简单，直接调用 print 到一个 String，但这里避免深度递归太长；
-    // 你可以改用更紧凑的格式，此处仅示例。
-    let mut s = String::new();
-    // 忽略写入错误
-    let _ = expr.print("", true, &mut s);
-    s.trim().to_string()
 }

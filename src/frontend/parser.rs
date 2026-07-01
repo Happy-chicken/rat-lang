@@ -390,7 +390,28 @@ impl<'a, 'diag> Parser<'a, 'diag> {
 
     fn parse_if_stmt(&mut self) -> Stmt {
         // 解析 if 语句
-        unimplemented!()
+        self.consume(TokenKind::If, "Expected 'if' at the beginning of if statement.");
+        let condition = self.parse_expr();
+        let then_branch = self.parse_block();
+        let mut elif_branches = Vec::new();
+        while self.check(TokenKind::Elif) {
+            self.advance(); // consume 'elif'
+            let elif_condition = self.parse_expr();
+            let elif_branch = self.parse_block();
+            elif_branches.push((elif_condition, elif_branch));
+        }
+        let else_branch = if self.check(TokenKind::Else) {
+            self.advance(); // consume 'else'
+            self.parse_block()
+        } else {
+            Block { stmts: Vec::new() }
+        };
+        Stmt::If {
+            condition: condition,
+            then_branch: then_branch,
+            elif_branch: elif_branches,
+            else_branch: else_branch,
+        }
     }
 
     fn parse_while_stmt(&mut self) -> Stmt {
