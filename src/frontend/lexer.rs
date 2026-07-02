@@ -16,6 +16,9 @@ static KEYWORDS: phf::Map<&'static str, TokenKind> = phf_map! {
     "super" => TokenKind::Super,
     "self" => TokenKind::Sself,
     "new" => TokenKind::New,
+    "impl" => TokenKind::Impl,
+    "trait" => TokenKind::Trait,
+    "for" => TokenKind::For,
 
     "def" => TokenKind::Def,
     "var" => TokenKind::Var,
@@ -31,6 +34,7 @@ static KEYWORDS: phf::Map<&'static str, TokenKind> = phf_map! {
 
     "none" => TokenKind::None,
     "ref" => TokenKind::Ref,
+    "ptr" => TokenKind::Ptr,
 
     "int" => TokenKind::Int,
     "float" => TokenKind::Float,
@@ -39,6 +43,7 @@ static KEYWORDS: phf::Map<&'static str, TokenKind> = phf_map! {
     "str" => TokenKind::Str,
 
     "list" => TokenKind::List,
+    "array" => TokenKind::Array,
 
 
 };
@@ -174,6 +179,7 @@ impl<'a> Lexer<'a> {
                 }
             }
             '*' => self.make_token_with_char(TokenKind::Star, ch),
+            '&' => self.make_token_with_char(TokenKind::BitwiseAnd, ch),
             '/' => self.make_token_with_char(TokenKind::Slash, ch),
             '%' => self.make_token_with_char(TokenKind::Modulo, ch),
             '=' => {

@@ -5,9 +5,12 @@ pub enum Type {
     Bool,
     Char,
     Str,
+    Ptr(Box<Type>),
 
     Void,
     List(Box<Type>),
+    Array(usize, Box<Type>),
+    
 
     Class(String),
 }

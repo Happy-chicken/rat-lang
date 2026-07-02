@@ -7,8 +7,12 @@ use frontend::parser::Parser;
 use crate::frontend::ast::printer::AstPrint;
 fn main() {
     let src = r#" 
+class MyClass {
+    var field1:int;
+    var field2:float;
+}
 def add(a:int, b:int)->int {
-    if (a > b) {
+    if a > b and a < 10 or !a {
         // a = a + b;
     } else {
         a = - a - b;
@@ -21,6 +25,11 @@ def main() {
     var y:float = 3.14;
     var z:str = "Hello, world!";
     var mylist:list<list<int>> = [1, 2, 3, 4, 5];
+    var myarray:array<3, array<3, int>> = [1, 2, 3];
+    var myptr:ptr<int> = &x;
+    var xx:int = *myptr;
+    var mycall:int = add(1, 2);
+    var myclass:MyClass;
     return x;
 }
     "#;

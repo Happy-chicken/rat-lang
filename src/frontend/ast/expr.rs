@@ -74,6 +74,8 @@ pub enum UnaryOp {
     Not,
     Inc,
     Dec,
+    Deref,
+    AddrOf,
 }
 
 // ---- ExprNode ----
@@ -127,9 +129,32 @@ impl AstPrint for Expr {
             }
             // Call —— 去掉分号，让 print_expr_list 的返回值作为块返回值
             Expr::Call { callee, args } => {
-                callee.print(&format!("{}{}", prefix, branch_str), is_last, output)?;
-                print_expr_list(args, prefix, is_last, output) // <-- 注意没有分号
+                writeln!(output, "{}{}Call", prefix, branch_str)?;
+                let child = next_prefix(prefix, is_last);
+                let has_args = !args.is_empty();
+
+                // callee 不是最后一个兄弟（如果后面还有 args）
+                writeln!(output, "{}├── callee:", child)?;
+                callee.expr.print(
+                    &format!("{}│   ", child),
+                    true, // callee 作为第一个子节点，后面可能还有 args
+                    output,
+                )?;
+
+                if has_args {
+                    // args 是最后一个兄弟
+                    writeln!(output, "{}└── args:", child)?;
+                    let args_prefix = format!("{}    ", child);   // “args:” 标签下的缩进前缀
+                    for (i, arg) in args.iter().enumerate() {
+                        arg.print(&args_prefix, i == args.len() - 1, output)?;
+                    }
+                }
+                Ok(())
             }
+            // Expr::Call { callee, args } => {
+            //     callee.print(&format!("{}{}", prefix, branch_str), is_last, output)?;
+            //     print_expr_list(args, prefix, is_last, output) // <-- 注意没有分号
+            // }
             // Member —— 块末尾须显式 Ok(())
             Expr::Member { object, field } => {
                 writeln!(output, "{}{}Member({})", prefix, branch_str, field)?;

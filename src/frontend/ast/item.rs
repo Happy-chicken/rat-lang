@@ -34,9 +34,20 @@ pub struct Parameter {
 pub struct Class {
     pub name: String,
     pub fields: Vec<Field>,
-    pub methods: Vec<FunctionDef>,
 }
 
+#[derive(Debug)]
+pub struct Trait {
+    pub name: String,
+    pub methods: Vec<FunctionDecl>,
+}
+
+#[derive(Debug)]
+pub struct Impl {
+    pub trait_name: String,
+    pub class_name: String,
+    pub methods: Vec<FunctionDef>,
+}
 
 #[derive(Debug)]
 pub struct Field {
@@ -52,6 +63,8 @@ impl AstPrint for Item {
             Item::FunctionDef(f) => f.print(prefix, is_last, output),
             Item::FunctionDecl(d) => d.print(prefix, is_last, output),
             Item::Class(c) => c.print(prefix, is_last, output),
+            // Item::Trait(t) => t.print(prefix, is_last, output),
+            // Item::Impl(i) => i.print(prefix, is_last, output),
         }
     }
 }
@@ -102,25 +115,12 @@ impl AstPrint for Class {
 
         // fields
         if !self.fields.is_empty() {
-            writeln!(output, "{}├── Fields:", child)?;
-            let f_child = format!("{}│   ", child);
+            writeln!(output, "{}└── Fields:", child)?;
+            let f_child = format!("{}    ", child);
             let count = self.fields.len();
             for (i, field) in self.fields.iter().enumerate() {
                 field.print(&f_child, i == count - 1, output)?;
             }
-        }
-
-        // methods
-        if !self.methods.is_empty() {
-            let marker = if self.fields.is_empty() { "├──" } else { "├──" };
-            writeln!(output, "{}{} Methods:", child, marker)?;
-            let m_child = next_prefix(&child, false); // 因为 methods 之后可能还有内容？这里没有，所以也可用 true
-            let count = self.methods.len();
-            for (i, method) in self.methods.iter().enumerate() {
-                method.print(&m_child, i == count - 1, output)?;
-            }
-        } else {
-            // no methods, nothing else
         }
         Ok(())
     }

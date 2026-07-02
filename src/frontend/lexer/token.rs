@@ -16,6 +16,7 @@ pub enum TokenKind {
     Backslash,  // (\)
     Modulo,     // %
     Colon,      // :
+    BitwiseAnd,   // &
 
     // One or two character tokens.
     RightBracket, // ]
@@ -59,11 +60,17 @@ pub enum TokenKind {
     None,
     // refernce
     Ref,
+    // pointer
+    Ptr,
     // class
     Class,
     Super,
     Sself,
     New,
+    Trait,
+    Impl,
+    For,
+
     // loop
     While,
     // control flow
@@ -77,6 +84,8 @@ pub enum TokenKind {
     Str,
     // list
     List,
+    // array
+    Array,
 
     TokenEOF,
     Error,
