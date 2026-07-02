@@ -25,7 +25,6 @@ pub struct FunctionDef {
     pub body: Block,
 }
 
-
 #[derive(Debug)]
 pub struct Parameter {
     pub name: String,
@@ -77,7 +76,9 @@ impl AstPrint for FunctionDecl {
         write!(output, "{}{}FunctionDecl({}", prefix, branch_str, self.name)?;
         write!(output, " params=[")?;
         for (i, p) in self.params.iter().enumerate() {
-            if i > 0 { write!(output, ", ")?; }
+            if i > 0 {
+                write!(output, ", ")?;
+            }
             write!(output, "{}: {:?}", p.name, p.ty)?;
         }
         write!(output, "]")?;
@@ -91,11 +92,16 @@ impl AstPrint for FunctionDecl {
 impl AstPrint for FunctionDef {
     fn print(&self, prefix: &str, is_last: bool, output: &mut impl Write) -> std::fmt::Result {
         let branch_str = branch(is_last);
-        writeln!(output, "{}{}FunctionDef({})", prefix, branch_str, self.function_header.name)?;
+        writeln!(
+            output,
+            "{}{}FunctionDef({})",
+            prefix, branch_str, self.function_header.name
+        )?;
         let child = next_prefix(prefix, is_last);
         // 先简单打印函数签名
         writeln!(output, "{}├── Signature:", child)?;
-        self.function_header.print(&format!("{}│   ", child), true, output)?;
+        self.function_header
+            .print(&format!("{}│   ", child), true, output)?;
         writeln!(output, "{}└── Body:", child)?;
         self.body.print(&format!("{}    ", child), true, output)?;
         Ok(())
@@ -105,7 +111,11 @@ impl AstPrint for FunctionDef {
 impl AstPrint for Parameter {
     fn print(&self, prefix: &str, is_last: bool, output: &mut impl Write) -> std::fmt::Result {
         let branch_str = branch(is_last);
-        writeln!(output, "{}{}Param({}: {:?})", prefix, branch_str, self.name, self.ty)
+        writeln!(
+            output,
+            "{}{}Param({}: {:?})",
+            prefix, branch_str, self.name, self.ty
+        )
     }
 }
 
@@ -131,7 +141,11 @@ impl AstPrint for Class {
 impl AstPrint for Field {
     fn print(&self, prefix: &str, is_last: bool, output: &mut impl Write) -> std::fmt::Result {
         let branch_str = branch(is_last);
-        writeln!(output, "{}{}Field({}: {:?})", prefix, branch_str, self.name, self.ty)
+        writeln!(
+            output,
+            "{}{}Field({}: {:?})",
+            prefix, branch_str, self.name, self.ty
+        )
     }
 }
 
@@ -152,7 +166,6 @@ impl AstPrint for Trait {
         }
         Ok(())
     }
-    
 }
 
 impl AstPrint for Impl {
@@ -184,7 +197,7 @@ impl AstPrint for Impl {
             for (i, method) in self.methods.iter().enumerate() {
                 method.print(&methods_prefix, i == count - 1, output)?;
             }
-        } 
+        }
         Ok(())
     }
 }

@@ -1,10 +1,10 @@
 mod common;
 mod frontend;
+use crate::frontend::ast::printer::AstPrint;
 use common::DiagCtxt;
 use common::location::SourceFile;
 use frontend::lexer::Lexer;
 use frontend::parser::Parser;
-use crate::frontend::ast::printer::AstPrint;
 fn main() {
     let src = r#" 
 class Eye {
@@ -64,4 +64,4 @@ def main() {
     diag_ctxt.print_all(&mut std::io::stdout()).expect("");
     // print!("{:#?}", ast);
 }
-    
+

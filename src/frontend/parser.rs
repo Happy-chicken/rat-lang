@@ -1,12 +1,10 @@
-use std::fmt::format;
-use std::iter::Peekable;
 use crate::common::{DiagCtxt, span};
+use crate::frontend::ast::{Program, expr::*, item::*, stmt::*, typ::*};
 use crate::frontend::lexer::{
-    Lexer, token::{Token, TokenKind}
+    Lexer,
+    token::{Token, TokenKind},
 };
-use crate::frontend::ast::{
-    Program, item::*, expr::*, stmt::*, typ::*
-};
+use std::iter::Peekable;
 
 pub struct Parser<'a, 'diag> {
     tokens: Peekable<Lexer<'a>>,
@@ -15,7 +13,10 @@ pub struct Parser<'a, 'diag> {
 
 impl<'a, 'diag> Parser<'a, 'diag> {
     pub fn new(lexer: Lexer<'a>, diag: &'diag mut DiagCtxt) -> Self {
-        Self { tokens: lexer.peekable(), diag }
+        Self {
+            tokens: lexer.peekable(),
+            diag,
+        }
     }
 
     fn peek(&mut self) -> Option<&Token> {
@@ -37,8 +38,15 @@ impl<'a, 'diag> Parser<'a, 'diag> {
         if self.check(kind) {
             return self.advance();
         }
-        let span = self.peek().map(|t|t.span).unwrap_or(span::Span::new(0.into(), 0.into()));
-        let error = self.diag.error(span, msg).note(format!("Expected {:?}", kind)).build();
+        let span = self
+            .peek()
+            .map(|t| t.span)
+            .unwrap_or(span::Span::new(0.into(), 0.into()));
+        let error = self
+            .diag
+            .error(span, msg)
+            .note(format!("Expected {:?}", kind))
+            .build();
         self.diag.emit(error);
         None
     }
@@ -68,33 +76,30 @@ impl<'a, 'diag> Parser<'a, 'diag> {
                     TokenKind::Class => Item::Class(self.parse_class()),
                     TokenKind::Trait => Item::Trait(self.parse_trait()),
                     TokenKind::Impl => Item::Impl(self.parse_impl()),
-                    // TODO: global variable 
+                    // TODO: global variable
                     // TokenKind::Var => self.parse_var_def_stmt(),
                     _ => panic!("Unexpected token: {:?}", token),
                 }
             }
-            None => panic!("Unexpected end of input")
+            None => panic!("Unexpected end of input"),
         }
     }
 
     fn parse_stmt(&mut self) -> Stmt {
         // 解析语句
         match self.peek() {
-            Some(token) => {
-                match token.kind {
-                    TokenKind::If => self.parse_if_stmt(),
-                    TokenKind::While => self.parse_while_stmt(),
-                    TokenKind::Return => self.parse_return_stmt(),
-                    TokenKind::Var => self.parse_var_def_stmt(),
-                    _ => {
-                        let expr = self.parse_expr();
-                        self.consume(TokenKind::Semicolon, "Expected ';' after expression.");
-                        Stmt::ExprStmt(expr)
-                    }
+            Some(token) => match token.kind {
+                TokenKind::If => self.parse_if_stmt(),
+                TokenKind::While => self.parse_while_stmt(),
+                TokenKind::Return => self.parse_return_stmt(),
+                TokenKind::Var => self.parse_var_def_stmt(),
+                _ => {
+                    let expr = self.parse_expr();
+                    self.consume(TokenKind::Semicolon, "Expected ';' after expression.");
+                    Stmt::ExprStmt(expr)
                 }
-                
-            }
-            None => panic!("Unexpected end of input")
+            },
+            None => panic!("Unexpected end of input"),
         }
     }
 
@@ -213,7 +218,7 @@ impl<'a, 'diag> Parser<'a, 'diag> {
             let kind = match op.kind {
                 TokenKind::Plus => BinaryOp::Add,
                 TokenKind::Minus => BinaryOp::Sub,
-                _ => unreachable!(),    
+                _ => unreachable!(),
             };
             let right = self.parse_factor();
             expr = ExprNode {
@@ -253,10 +258,11 @@ impl<'a, 'diag> Parser<'a, 'diag> {
 
     fn parse_unary(&mut self) -> ExprNode {
         // 解析一元表达式
-        if self.check(TokenKind::Bang) || 
-           self.check(TokenKind::Minus) || 
-           self.check(TokenKind::BitwiseAnd) || 
-           self.check(TokenKind::Star) {
+        if self.check(TokenKind::Bang)
+            || self.check(TokenKind::Minus)
+            || self.check(TokenKind::BitwiseAnd)
+            || self.check(TokenKind::Star)
+        {
             let op = self.advance().unwrap(); // consume '!' or '-' or '&' or '*'
             let expr = self.parse_unary();
             return ExprNode {
@@ -283,12 +289,13 @@ impl<'a, 'diag> Parser<'a, 'diag> {
             let token = self.peek().unwrap();
             match token.kind {
                 TokenKind::LeftParen => {
-                    expr =  self.finish_call(expr);
+                    expr = self.finish_call(expr);
                 }
                 TokenKind::Dot => {
                     self.advance(); // consume '.'
-                    let field_token = self.consume(TokenKind::Identifier, "Expected field name after '.'.");
-                    expr =  ExprNode {
+                    let field_token =
+                        self.consume(TokenKind::Identifier, "Expected field name after '.'.");
+                    expr = ExprNode {
                         span: expr.span,
                         expr: Expr::Member {
                             object: Box::new(expr),
@@ -298,7 +305,7 @@ impl<'a, 'diag> Parser<'a, 'diag> {
                 }
                 TokenKind::PlusPlus => {
                     self.advance(); // consume '++'
-                    expr =  ExprNode {
+                    expr = ExprNode {
                         span: expr.span,
                         expr: Expr::Unary {
                             op: UnaryOp::Inc,
@@ -308,7 +315,7 @@ impl<'a, 'diag> Parser<'a, 'diag> {
                 }
                 TokenKind::MinusMinus => {
                     self.advance(); // consume '--'
-                    expr =  ExprNode {
+                    expr = ExprNode {
                         span: expr.span,
                         expr: Expr::Unary {
                             op: UnaryOp::Dec,
@@ -319,8 +326,11 @@ impl<'a, 'diag> Parser<'a, 'diag> {
                 TokenKind::LeftBracket => {
                     self.advance(); // consume '['
                     let index = self.parse_expr();
-                    self.consume(TokenKind::RightBracket, "Expected ']' after index expression.");
-                    expr =  ExprNode {
+                    self.consume(
+                        TokenKind::RightBracket,
+                        "Expected ']' after index expression.",
+                    );
+                    expr = ExprNode {
                         span: expr.span,
                         expr: Expr::Index {
                             object: Box::new(expr),
@@ -329,7 +339,6 @@ impl<'a, 'diag> Parser<'a, 'diag> {
                     };
                 }
                 _ => break,
-                
             }
         }
         expr
@@ -371,7 +380,7 @@ impl<'a, 'diag> Parser<'a, 'diag> {
                 let expr = self.parse_expr();
                 self.consume(TokenKind::RightParen, "Expected ')' after expression.");
                 expr
-            },
+            }
             TokenKind::LeftBracket => {
                 // 解析列表字面量
                 let mut elements = Vec::new();
@@ -397,7 +406,10 @@ impl<'a, 'diag> Parser<'a, 'diag> {
 
     fn parse_if_stmt(&mut self) -> Stmt {
         // 解析 if 语句
-        self.consume(TokenKind::If, "Expected 'if' at the beginning of if statement.");
+        self.consume(
+            TokenKind::If,
+            "Expected 'if' at the beginning of if statement.",
+        );
         let condition = self.parse_expr();
         let then_branch = self.parse_block();
         let mut elif_branches = Vec::new();
@@ -423,7 +435,10 @@ impl<'a, 'diag> Parser<'a, 'diag> {
 
     fn parse_while_stmt(&mut self) -> Stmt {
         // 解析 while 语句
-        self.consume(TokenKind::While, "Expected 'while' at the beginning of while statement.");
+        self.consume(
+            TokenKind::While,
+            "Expected 'while' at the beginning of while statement.",
+        );
         let condition = self.parse_expr();
         let body = self.parse_block();
         Stmt::Loop {
@@ -434,7 +449,10 @@ impl<'a, 'diag> Parser<'a, 'diag> {
 
     fn parse_return_stmt(&mut self) -> Stmt {
         // 解析 return 语句
-        self.consume(TokenKind::Return, "Expected 'return' at the beginning of return statement.");
+        self.consume(
+            TokenKind::Return,
+            "Expected 'return' at the beginning of return statement.",
+        );
         let expr = if !self.check(TokenKind::Semicolon) {
             Some(self.parse_expr())
         } else {
@@ -446,8 +464,14 @@ impl<'a, 'diag> Parser<'a, 'diag> {
 
     fn parse_var_def_stmt(&mut self) -> Stmt {
         // 解析变量定义语句
-        self.consume(TokenKind::Var, "Expected 'var' at the beginning of variable definition.");
-        let var_name = self.consume(TokenKind::Identifier, "Expected variable name.").unwrap().lexeme;
+        self.consume(
+            TokenKind::Var,
+            "Expected 'var' at the beginning of variable definition.",
+        );
+        let var_name = self
+            .consume(TokenKind::Identifier, "Expected variable name.")
+            .unwrap()
+            .lexeme;
         self.consume(TokenKind::Colon, "Expected ':' after variable name.");
         let var_type = self.parse_type();
         let var_init = if self.check(TokenKind::Equal) {
@@ -456,18 +480,23 @@ impl<'a, 'diag> Parser<'a, 'diag> {
         } else {
             None
         };
-        self.consume(TokenKind::Semicolon, "Expected ';' after variable definition.");
+        self.consume(
+            TokenKind::Semicolon,
+            "Expected ';' after variable definition.",
+        );
         Stmt::VarDef {
             name: var_name,
             ty: var_type,
             init: var_init,
         }
-
     }
 
     fn parse_block(&mut self) -> Block {
         // 解析代码块
-        self.consume(TokenKind::LeftBrace, "Expected '{' at the beginning of block.");
+        self.consume(
+            TokenKind::LeftBrace,
+            "Expected '{' at the beginning of block.",
+        );
         let mut stmts = Vec::new();
         while !self.check(TokenKind::RightBrace) {
             stmts.push(self.parse_stmt());
@@ -526,8 +555,15 @@ impl<'a, 'diag> Parser<'a, 'diag> {
                     TokenKind::Array => {
                         self.advance().unwrap(); // consume 'array'
                         self.consume(TokenKind::Less, "Expected '<' after 'array'.");
-                        let size_token = self.consume(TokenKind::IntLiteral, "Expected array size as an integer literal.");
-                        let size = size_token.unwrap().lexeme.parse::<usize>().expect("Array size must be a valid integer.");
+                        let size_token = self.consume(
+                            TokenKind::IntLiteral,
+                            "Expected array size as an integer literal.",
+                        );
+                        let size = size_token
+                            .unwrap()
+                            .lexeme
+                            .parse::<usize>()
+                            .expect("Array size must be a valid integer.");
                         self.consume(TokenKind::Comma, "Expected ',' after array size.");
                         let element_type = self.parse_type();
                         self.consume(TokenKind::Greater, "Expected '>' after array element type.");
@@ -536,16 +572,22 @@ impl<'a, 'diag> Parser<'a, 'diag> {
                     _ => panic!("Unexpected token in type expression"),
                 }
             }
-            None => panic!("Unexpected end of input")
+            None => panic!("Unexpected end of input"),
         }
     }
 
     fn parse_parameter(&mut self) -> Option<Parameter> {
         // 解析函数参数
-        let param_name = self.consume(TokenKind::Identifier, "Expected parameter name.").unwrap().lexeme;
+        let param_name = self
+            .consume(TokenKind::Identifier, "Expected parameter name.")
+            .unwrap()
+            .lexeme;
         self.consume(TokenKind::Colon, "Expected ':' after parameter name.");
         let param_type = self.parse_type();
-        Some(Parameter { name: param_name, ty: param_type })
+        Some(Parameter {
+            name: param_name,
+            ty: param_type,
+        })
     }
 
     fn parse_header(&mut self) -> FunctionDecl {
@@ -568,14 +610,24 @@ impl<'a, 'diag> Parser<'a, 'diag> {
         } else {
             None
         };
-        FunctionDecl { name: func_name, params, return_type: return_type }
+        FunctionDecl {
+            name: func_name,
+            params,
+            return_type: return_type,
+        }
     }
 
     fn parse_func_decl(&mut self) -> FunctionDecl {
         // 解析函数声明
-        self.consume(TokenKind::Decl, "Expected 'decl' before function declaration.");
+        self.consume(
+            TokenKind::Decl,
+            "Expected 'decl' before function declaration.",
+        );
         let header = self.parse_header();
-        self.consume(TokenKind::Semicolon, "Expected ';' after function declaration.");
+        self.consume(
+            TokenKind::Semicolon,
+            "Expected ';' after function declaration.",
+        );
         header
     }
 
@@ -593,7 +645,10 @@ impl<'a, 'diag> Parser<'a, 'diag> {
     fn parse_trait(&mut self) -> Trait {
         // 解析 trait 块
         self.consume(TokenKind::Trait, "Expected 'trait' before trait block.");
-        let trait_name = self.consume(TokenKind::Identifier, "Expected trait name after 'trait'.").unwrap().lexeme;
+        let trait_name = self
+            .consume(TokenKind::Identifier, "Expected trait name after 'trait'.")
+            .unwrap()
+            .lexeme;
         self.consume(TokenKind::LeftBrace, "Expected '{' after trait name.");
         let mut methods = Vec::new();
         while !self.check(TokenKind::RightBrace) {
@@ -610,30 +665,42 @@ impl<'a, 'diag> Parser<'a, 'diag> {
         // 解析 impl 块
         self.consume(TokenKind::Impl, "Expected 'impl' before impl block.");
         // TODO: parse trait name if needed
-        let mut trait_or_class_name = self.consume(TokenKind::Identifier, "Expected class or trait name after 'impl'.").unwrap().lexeme;
-        let mut trait_name:Option<String> = None;
+        let mut trait_or_class_name = self
+            .consume(
+                TokenKind::Identifier,
+                "Expected class or trait name after 'impl'.",
+            )
+            .unwrap()
+            .lexeme;
+        let mut trait_name: Option<String> = None;
         let mut methods = Vec::new();
         if self.check(TokenKind::For) {
             self.advance(); // consume 'for'
             trait_name = Some(trait_or_class_name);
-            trait_or_class_name = self.consume(TokenKind::Identifier, "Expected class name after 'for'.").unwrap().lexeme;
-        } 
+            trait_or_class_name = self
+                .consume(TokenKind::Identifier, "Expected class name after 'for'.")
+                .unwrap()
+                .lexeme;
+        }
         self.consume(TokenKind::LeftBrace, "Expected '{' after class name.");
         while !self.check(TokenKind::RightBrace) {
             methods.push(self.parse_function());
-        }   
+        }
         self.consume(TokenKind::RightBrace, "Expected '}' after methods.");
         Impl {
             trait_name: trait_name,
             class_name: trait_or_class_name,
             methods: methods,
-        } 
+        }
     }
 
     fn parse_fields(&mut self) -> Field {
         // 解析类的字段定义
         self.consume(TokenKind::Var, "Expected 'var' before field definition.");
-        let field_name = self.consume(TokenKind::Identifier, "Expected field name.").unwrap().lexeme;
+        let field_name = self
+            .consume(TokenKind::Identifier, "Expected field name.")
+            .unwrap()
+            .lexeme;
         self.consume(TokenKind::Colon, "Expected ':' after field name.");
         let field_type = self.parse_type();
         self.consume(TokenKind::Semicolon, "Expected ';' after field definition.");
@@ -645,14 +712,23 @@ impl<'a, 'diag> Parser<'a, 'diag> {
 
     fn parse_class(&mut self) -> Class {
         // 解析类定义
-        self.consume(TokenKind::Class, "Expected 'class' before class definition.");
-        let class_name = self.consume(TokenKind::Identifier, "Expected class name.").unwrap().lexeme;
+        self.consume(
+            TokenKind::Class,
+            "Expected 'class' before class definition.",
+        );
+        let class_name = self
+            .consume(TokenKind::Identifier, "Expected class name.")
+            .unwrap()
+            .lexeme;
         self.consume(TokenKind::LeftBrace, "Expected '{' after class name.");
         let mut fields = Vec::new();
         while !self.check(TokenKind::RightBrace) {
             fields.push(self.parse_fields());
         }
-        self.consume(TokenKind::RightBrace, "Expected '}' after class definition.");
+        self.consume(
+            TokenKind::RightBrace,
+            "Expected '}' after class definition.",
+        );
         Class {
             name: class_name,
             fields: fields,
@@ -689,4 +765,3 @@ impl<'a, 'diag> Parser<'a, 'diag> {
         }
     }
 }
-

@@ -76,4 +76,3 @@ impl DiagnosticBuilder {
         self.diag
     }
 }
-

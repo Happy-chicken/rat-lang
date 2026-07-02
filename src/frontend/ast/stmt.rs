@@ -1,5 +1,5 @@
 use crate::frontend::ast::expr::ExprNode;
-use crate::frontend::ast::printer::{AstPrint, next_prefix, branch};
+use crate::frontend::ast::printer::{AstPrint, branch, next_prefix};
 use crate::frontend::ast::typ::Type;
 use std::fmt::Write;
 #[derive(Debug)]
@@ -75,7 +75,15 @@ impl AstPrint for Stmt {
                 // then branch
                 writeln!(output, "{}├── Then:", child)?;
                 let has_elif_or_else = !elif_branch.is_empty() || !else_branch.stmts.is_empty();
-                then_branch.print(&format!("{}{}", child, if has_elif_or_else { "│   " } else { "    " }), true, output)?;
+                then_branch.print(
+                    &format!(
+                        "{}{}",
+                        child,
+                        if has_elif_or_else { "│   " } else { "    " }
+                    ),
+                    true,
+                    output,
+                )?;
 
                 // elif branches
                 let elif_count = elif_branch.len();

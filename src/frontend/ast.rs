@@ -1,8 +1,8 @@
 pub mod expr;
 pub mod item;
+pub mod printer;
 pub mod stmt;
 pub mod typ;
-pub mod printer;
 
 use item::Item;
 use printer::{AstPrint, next_prefix};

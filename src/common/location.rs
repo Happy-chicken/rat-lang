@@ -54,4 +54,3 @@ pub struct Location {
     pub line: usize,
     pub col: usize,
 }
-

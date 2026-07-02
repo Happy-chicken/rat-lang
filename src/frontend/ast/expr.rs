@@ -95,8 +95,20 @@ impl AstPrint for Expr {
             Expr::Int(v) => writeln!(output, "{}{}Int({})", prefix, branch_str, v),
             Expr::Bool(v) => writeln!(output, "{}{}Bool({})", prefix, branch_str, v),
             Expr::Float(v) => writeln!(output, "{}{}Float({})", prefix, branch_str, v),
-            Expr::Char(c) => writeln!(output, "{}{}Char('{}')", prefix, branch_str, escape_char(*c)),
-            Expr::StringLiteral(s) => writeln!(output, "{}{}String(\"{}\")", prefix, branch_str, escape_str(s)),
+            Expr::Char(c) => writeln!(
+                output,
+                "{}{}Char('{}')",
+                prefix,
+                branch_str,
+                escape_char(*c)
+            ),
+            Expr::StringLiteral(s) => writeln!(
+                output,
+                "{}{}String(\"{}\")",
+                prefix,
+                branch_str,
+                escape_str(s)
+            ),
             Expr::Variable(name) => writeln!(output, "{}{}Variable({})", prefix, branch_str, name),
 
             // Assign —— 块末尾须显式 Ok(())
@@ -144,7 +156,7 @@ impl AstPrint for Expr {
                 if has_args {
                     // args 是最后一个兄弟
                     writeln!(output, "{}└── args:", child)?;
-                    let args_prefix = format!("{}    ", child);   // “args:” 标签下的缩进前缀
+                    let args_prefix = format!("{}    ", child); // “args:” 标签下的缩进前缀
                     for (i, arg) in args.iter().enumerate() {
                         arg.print(&args_prefix, i == args.len() - 1, output)?;
                     }
@@ -204,7 +216,6 @@ fn print_expr_list(
     }
     Ok(())
 }
-
 
 fn escape_char(c: char) -> String {
     match c {
