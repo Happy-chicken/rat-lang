@@ -208,12 +208,12 @@ impl<'a, 'diag> Parser<'a, 'diag> {
         let mut expr = self.parse_factor();
         while self.check(TokenKind::Plus) || self.check(TokenKind::Minus) {
             let op = self.advance().unwrap(); // consume '+' or '-'
-            let right = self.parse_factor();
             let kind = match op.kind {
                 TokenKind::Plus => BinaryOp::Add,
                 TokenKind::Minus => BinaryOp::Sub,
                 _ => unreachable!(),    
             };
+            let right = self.parse_factor();
             expr = ExprNode {
                 span: expr.span.merge(right.span),
                 expr: Expr::Binary {
@@ -251,9 +251,9 @@ impl<'a, 'diag> Parser<'a, 'diag> {
 
     fn parse_unary(&mut self) -> ExprNode {
         // 解析一元表达式
-        let expr = self.parse_postfix();
         if self.check(TokenKind::Bang) || self.check(TokenKind::Minus) {
             let op = self.advance().unwrap(); // consume '!' or '-'
+            let expr = self.parse_unary();
             return ExprNode {
                 span: expr.span,
                 expr: Expr::Unary {
@@ -266,7 +266,7 @@ impl<'a, 'diag> Parser<'a, 'diag> {
                 },
             };
         }
-        expr
+        self.parse_postfix()
     }
 
     fn parse_postfix(&mut self) -> ExprNode {
@@ -283,7 +283,7 @@ impl<'a, 'diag> Parser<'a, 'diag> {
                     let field_token = self.consume(TokenKind::Identifier, "Expected field name after '.'.");
                     expr =  ExprNode {
                         span: expr.span,
-                        expr: Expr::MemberAccess {
+                        expr: Expr::Member {
                             object: Box::new(expr),
                             field: field_token.unwrap().lexeme,
                         },

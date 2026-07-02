@@ -31,17 +31,12 @@ pub enum Expr {
         expr: Box<ExprNode>,
     },
     Call {
-        name: String,
+        callee: Box<ExprNode>,
         args: Vec<ExprNode>,
     },
-    MemberAccess {
+    Member {
         object: Box<ExprNode>,
         field: String,
-    },
-    MethodCall {
-        object: Box<ExprNode>,
-        method: String,
-        args: Vec<ExprNode>,
     },
     Index {
         object: Box<ExprNode>,
@@ -131,32 +126,16 @@ impl AstPrint for Expr {
                 Ok(())
             }
             // Call —— 去掉分号，让 print_expr_list 的返回值作为块返回值
-            Expr::Call { name, args } => {
-                writeln!(output, "{}{}Call({})", prefix, branch_str, name)?;
+            Expr::Call { callee, args } => {
+                callee.print(&format!("{}{}", prefix, branch_str), is_last, output)?;
                 print_expr_list(args, prefix, is_last, output) // <-- 注意没有分号
             }
-            // MemberAccess —— 块末尾须显式 Ok(())
-            Expr::MemberAccess { object, field } => {
-                writeln!(output, "{}{}MemberAccess({})", prefix, branch_str, field)?;
+            // Member —— 块末尾须显式 Ok(())
+            Expr::Member { object, field } => {
+                writeln!(output, "{}{}Member({})", prefix, branch_str, field)?;
                 let child = next_prefix(prefix, is_last);
                 writeln!(output, "{}└── Object:", child)?;
                 object.print(&format!("{}    ", child), true, output)?;
-                Ok(())
-            }
-            // MethodCall —— 需要统一返回 Ok(())
-            Expr::MethodCall { object, method, args } => {
-                writeln!(output, "{}{}MethodCall({})", prefix, branch_str, method)?;
-                let child = next_prefix(prefix, is_last);
-                let has_args = !args.is_empty();
-                writeln!(output, "{}├── Object:", child)?;
-                object.print(
-                    &format!("{}{}", child, if has_args { "│   " } else { "    " }),
-                    true,
-                    output,
-                )?;
-                if has_args {
-                    print_expr_list(args, &child, false, output)?;
-                }
                 Ok(())
             }
             // Index —— 块末尾须显式 Ok(())

@@ -9,9 +9,9 @@ fn main() {
     let src = r#" 
 def add(a:int, b:int)->int {
     if (a > b) {
-        a = a + b;
+        // a = a + b;
     } else {
-        a = a - b;
+        a = - a - b;
     }
     return a;
 }
