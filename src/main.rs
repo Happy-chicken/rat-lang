@@ -7,16 +7,25 @@ use frontend::parser::Parser;
 use crate::frontend::ast::printer::AstPrint;
 fn main() {
     let src = r#" 
+class Eye {
+}
+class Ear {
+}
 class Dog {
-    var color:bool;
-    var age:int;
+    var eye:Eye;
+    var ear:Ear;
 }
 trait Speakable {
     decl speak() -> str;
 }
-impl Dog {
+impl Speakable for Dog {
     def speak() -> str {
         return "Woof!";
+    }
+}
+impl Dog {
+    def new() -> str {
+        return "Dog created!";
     }
 }
 decl sub(a:int, b:int)->int;

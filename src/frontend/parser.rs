@@ -38,8 +38,8 @@ impl<'a, 'diag> Parser<'a, 'diag> {
             return self.advance();
         }
         let span = self.peek().map(|t|t.span).unwrap_or(span::Span::new(0.into(), 0.into()));
-        let diagnostic = self.diag.error(span, msg).note(format!("Expected {:?}", kind)).build();
-        self.diag.emit(diagnostic);
+        let error = self.diag.error(span, msg).note(format!("Expected {:?}", kind)).build();
+        self.diag.emit(error);
         None
     }
 
@@ -550,7 +550,8 @@ impl<'a, 'diag> Parser<'a, 'diag> {
 
     fn parse_header(&mut self) -> FunctionDecl {
         // 解析函数头部，返回函数名、参数列表和返回类型
-        let func_name = self.consume(TokenKind::Identifier, "Expected function name.").unwrap().lexeme;
+        let func_name = self.consume(TokenKind::Identifier, "Expected function name.");
+        let func_name = func_name.unwrap().lexeme;
         self.consume(TokenKind::LeftParen, "Expected '(' after function name.");
         let mut params = Vec::new();
         while !self.check(TokenKind::RightParen) {
@@ -609,19 +610,24 @@ impl<'a, 'diag> Parser<'a, 'diag> {
         // 解析 impl 块
         self.consume(TokenKind::Impl, "Expected 'impl' before impl block.");
         // TODO: parse trait name if needed
-        let trait_name = String::new();
-        let class_name = self.consume(TokenKind::Identifier, "Expected class name after 'impl'.").unwrap().lexeme;
-        self.consume(TokenKind::LeftBrace, "Expected '{' after class name.");
+        let mut trait_or_class_name = self.consume(TokenKind::Identifier, "Expected class or trait name after 'impl'.").unwrap().lexeme;
+        let mut trait_name:Option<String> = None;
         let mut methods = Vec::new();
+        if self.check(TokenKind::For) {
+            self.advance(); // consume 'for'
+            trait_name = Some(trait_or_class_name);
+            trait_or_class_name = self.consume(TokenKind::Identifier, "Expected class name after 'for'.").unwrap().lexeme;
+        } 
+        self.consume(TokenKind::LeftBrace, "Expected '{' after class name.");
         while !self.check(TokenKind::RightBrace) {
             methods.push(self.parse_function());
-        }
+        }   
         self.consume(TokenKind::RightBrace, "Expected '}' after methods.");
         Impl {
             trait_name: trait_name,
-            class_name: class_name,
+            class_name: trait_or_class_name,
             methods: methods,
-        }
+        } 
     }
 
     fn parse_fields(&mut self) -> Field {

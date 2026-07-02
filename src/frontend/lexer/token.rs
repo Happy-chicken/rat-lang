@@ -66,7 +66,7 @@ pub enum TokenKind {
     Class,
     Super,
     Sself,
-    New,
+    // New,
     Trait,
     Impl,
     For,

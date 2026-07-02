@@ -46,7 +46,7 @@ pub struct Trait {
 
 #[derive(Debug)]
 pub struct Impl {
-    pub trait_name: String,
+    pub trait_name: Option<String>,
     pub class_name: String,
     pub methods: Vec<FunctionDef>,
 }
@@ -158,16 +158,22 @@ impl AstPrint for Trait {
 impl AstPrint for Impl {
     fn print(&self, prefix: &str, is_last: bool, output: &mut impl Write) -> std::fmt::Result {
         let branch_str = branch(is_last);
-        let trait_part = if self.trait_name.is_empty() {
-            String::new()
-        } else {
-            format!("({})", self.trait_name)
-        };
-        writeln!(
-            output,
-            "{}{}Impl{} for {}",
-            prefix, branch_str, trait_part, self.class_name
-        )?;
+        match &self.trait_name {
+            Some(trait_name) => {
+                writeln!(
+                    output,
+                    "{}{}Impl({}) for {}",
+                    prefix, branch_str, trait_name, self.class_name
+                )?;
+            }
+            None => {
+                writeln!(
+                    output,
+                    "{}{}Impl for {}",
+                    prefix, branch_str, self.class_name
+                )?;
+            }
+        }
 
         let child = next_prefix(prefix, is_last);
 
