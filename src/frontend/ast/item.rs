@@ -8,6 +8,8 @@ pub enum Item {
     FunctionDef(FunctionDef),
     FunctionDecl(FunctionDecl),
     Class(Class),
+    Trait(Trait),
+    Impl(Impl),
 }
 
 #[derive(Debug)]
@@ -63,8 +65,8 @@ impl AstPrint for Item {
             Item::FunctionDef(f) => f.print(prefix, is_last, output),
             Item::FunctionDecl(d) => d.print(prefix, is_last, output),
             Item::Class(c) => c.print(prefix, is_last, output),
-            // Item::Trait(t) => t.print(prefix, is_last, output),
-            // Item::Impl(i) => i.print(prefix, is_last, output),
+            Item::Trait(t) => t.print(prefix, is_last, output),
+            Item::Impl(i) => i.print(prefix, is_last, output),
         }
     }
 }
@@ -126,10 +128,57 @@ impl AstPrint for Class {
     }
 }
 
-impl AstPrint for crate::frontend::ast::item::Field {
+impl AstPrint for Field {
     fn print(&self, prefix: &str, is_last: bool, output: &mut impl Write) -> std::fmt::Result {
         let branch_str = branch(is_last);
         writeln!(output, "{}{}Field({}: {:?})", prefix, branch_str, self.name, self.ty)
     }
 }
 
+impl AstPrint for Trait {
+    fn print(&self, prefix: &str, is_last: bool, output: &mut impl Write) -> std::fmt::Result {
+        let branch_str = branch(is_last);
+        writeln!(output, "{}{}Trait({})", prefix, branch_str, self.name)?;
+        let child = next_prefix(prefix, is_last);
+
+        // methods
+        if !self.methods.is_empty() {
+            writeln!(output, "{}└── Methods:", child)?;
+            let m_child = format!("{}    ", child);
+            let count = self.methods.len();
+            for (i, method) in self.methods.iter().enumerate() {
+                method.print(&m_child, i == count - 1, output)?;
+            }
+        }
+        Ok(())
+    }
+    
+}
+
+impl AstPrint for Impl {
+    fn print(&self, prefix: &str, is_last: bool, output: &mut impl Write) -> std::fmt::Result {
+        let branch_str = branch(is_last);
+        let trait_part = if self.trait_name.is_empty() {
+            String::new()
+        } else {
+            format!("({})", self.trait_name)
+        };
+        writeln!(
+            output,
+            "{}{}Impl{} for {}",
+            prefix, branch_str, trait_part, self.class_name
+        )?;
+
+        let child = next_prefix(prefix, is_last);
+
+        if !self.methods.is_empty() {
+            writeln!(output, "{}└── Methods:", child)?;
+            let methods_prefix = format!("{}    ", child); // Methods: 下唯一分支的子项前缀
+            let count = self.methods.len();
+            for (i, method) in self.methods.iter().enumerate() {
+                method.print(&methods_prefix, i == count - 1, output)?;
+            }
+        } 
+        Ok(())
+    }
+}

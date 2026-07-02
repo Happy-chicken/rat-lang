@@ -63,38 +63,39 @@ impl DiagCtxt {
             Level::Help => "help",
         };
 
-        // 假设 primary_label 所在的文件可通过某种方式获取，这里简化：遍历所有文件查找
-        // 真实场景中 Span 应持有文件 ID，此处暂用硬编码或根据 primary_label 查找
+        // 获取主标签的位置
         let (file, loc_lo, loc_hi) = if let Some(ref primary) = diag.primary_label {
-            // 简单策略：取第一个文件（应改进）
-            let (name, file) = self.files.iter().next().unwrap(); // 注意 unwrap 安全性，演示用
+            // TODO: 改进文件查找（用 span 中的 file_id）
+            let (name, file) = self.files.iter().next().unwrap();
             let loc_lo = file.lookup_pos(primary.span.low);
             let loc_hi = file.lookup_pos(primary.span.high);
             (file, loc_lo, loc_hi)
         } else {
-            // 没有 span 时，只打印消息
             writeln!(writer, "{}: {}", level_str, diag.message)?;
             return Ok(());
         };
 
-        // 打印主消息
+        // 主消息
         writeln!(writer, "{}: {}", level_str, diag.message)?;
-        // 打印位置和源码行
-        writeln!(writer, "  --> {}:{}:{}", file.name, loc_lo.line, loc_lo.col)?;
+        // 位置（1‑based 行和列）
+        writeln!(writer, "  --> {}:{}:{}", file.name, loc_lo.line, loc_lo.col + 1)?;
+
+        // 打印源码行
         if let Some(line) = file.get_line(loc_lo.line) {
             writeln!(writer, "   |")?;
-            writeln!(writer, "   | {}",  line)?;
-            // 下划线标注
-            let start = loc_lo.col ;
+            writeln!(writer, "   | {}", line)?;
+
+            // 计算下划线
+            let start = loc_lo.col;          // 0‑based
             let end = if loc_lo.line == loc_hi.line {
-                loc_hi.col 
+                loc_hi.col
             } else {
                 line.len()
             };
-            let underline: String = (0..line.len())
-                .map(|i| if i >= start && i < end { '^' } else { ' ' })
-                .collect();
-            writeln!(writer, "   | {}{}", " ".repeat(start), underline)?;
+            let carets = "^".repeat(end.saturating_sub(start));
+            let padding = " ".repeat(start);
+            // 关键：只加一次 padding，underline 内部不要再包含空格
+            writeln!(writer, "   | {}{}", padding, carets)?;
         }
 
         for note in &diag.notes {

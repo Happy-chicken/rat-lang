@@ -63,9 +63,11 @@ impl<'a, 'diag> Parser<'a, 'diag> {
         match self.peek() {
             Some(token) => {
                 match token.kind {
-                    TokenKind::Decl => Item::FunctionDecl(self.parse_header()),
+                    TokenKind::Decl => Item::FunctionDecl(self.parse_func_decl()),
                     TokenKind::Def => Item::FunctionDef(self.parse_function()),
                     TokenKind::Class => Item::Class(self.parse_class()),
+                    TokenKind::Trait => Item::Trait(self.parse_trait()),
+                    TokenKind::Impl => Item::Impl(self.parse_impl()),
                     // TODO: global variable 
                     // TokenKind::Var => self.parse_var_def_stmt(),
                     _ => panic!("Unexpected token: {:?}", token),
@@ -568,6 +570,14 @@ impl<'a, 'diag> Parser<'a, 'diag> {
         FunctionDecl { name: func_name, params, return_type: return_type }
     }
 
+    fn parse_func_decl(&mut self) -> FunctionDecl {
+        // 解析函数声明
+        self.consume(TokenKind::Decl, "Expected 'decl' before function declaration.");
+        let header = self.parse_header();
+        self.consume(TokenKind::Semicolon, "Expected ';' after function declaration.");
+        header
+    }
+
     fn parse_function(&mut self) -> FunctionDef {
         // 解析函数定义
         self.consume(TokenKind::Def, "Expected 'def' before function definition.");
@@ -576,6 +586,41 @@ impl<'a, 'diag> Parser<'a, 'diag> {
         FunctionDef {
             function_header: header,
             body,
+        }
+    }
+
+    fn parse_trait(&mut self) -> Trait {
+        // 解析 trait 块
+        self.consume(TokenKind::Trait, "Expected 'trait' before trait block.");
+        let trait_name = self.consume(TokenKind::Identifier, "Expected trait name after 'trait'.").unwrap().lexeme;
+        self.consume(TokenKind::LeftBrace, "Expected '{' after trait name.");
+        let mut methods = Vec::new();
+        while !self.check(TokenKind::RightBrace) {
+            methods.push(self.parse_func_decl());
+        }
+        self.consume(TokenKind::RightBrace, "Expected '}' after trait methods.");
+        Trait {
+            name: trait_name,
+            methods: methods,
+        }
+    }
+
+    fn parse_impl(&mut self) -> Impl {
+        // 解析 impl 块
+        self.consume(TokenKind::Impl, "Expected 'impl' before impl block.");
+        // TODO: parse trait name if needed
+        let trait_name = String::new();
+        let class_name = self.consume(TokenKind::Identifier, "Expected class name after 'impl'.").unwrap().lexeme;
+        self.consume(TokenKind::LeftBrace, "Expected '{' after class name.");
+        let mut methods = Vec::new();
+        while !self.check(TokenKind::RightBrace) {
+            methods.push(self.parse_function());
+        }
+        self.consume(TokenKind::RightBrace, "Expected '}' after methods.");
+        Impl {
+            trait_name: trait_name,
+            class_name: class_name,
+            methods: methods,
         }
     }
 

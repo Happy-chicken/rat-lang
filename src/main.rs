@@ -7,10 +7,19 @@ use frontend::parser::Parser;
 use crate::frontend::ast::printer::AstPrint;
 fn main() {
     let src = r#" 
-class MyClass {
-    var field1:int;
-    var field2:float;
+class Dog {
+    var color:bool;
+    var age:int;
 }
+trait Speakable {
+    decl speak() -> str;
+}
+impl Dog {
+    def speak() -> str {
+        return "Woof!";
+    }
+}
+decl sub(a:int, b:int)->int;
 def add(a:int, b:int)->int {
     if a > b and a < 10 or !a {
         // a = a + b;
@@ -29,7 +38,7 @@ def main() {
     var myptr:ptr<int> = &x;
     var xx:int = *myptr;
     var mycall:int = add(1, 2);
-    var myclass:MyClass;
+    var dog:Dog;
     return x;
 }
     "#;
