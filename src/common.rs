@@ -1,9 +1,9 @@
-pub mod location;
 pub mod error;
+pub mod location;
 pub mod span;
 
-use crate::common::location::SourceFile;
 use crate::common::error::{Diagnostic, DiagnosticBuilder, Level};
+use crate::common::location::SourceFile;
 use std::collections::HashMap;
 use std::io::{self, Write};
 
@@ -34,7 +34,11 @@ impl DiagCtxt {
     }
 
     /// 快捷创建错误并直接提交（常用于解析阶段）。
-    pub fn error(& mut self, span: crate::common::span::Span, msg: impl Into<String>) -> DiagnosticBuilder {
+    pub fn error(
+        &mut self,
+        span: crate::common::span::Span,
+        msg: impl Into<String>,
+    ) -> DiagnosticBuilder {
         // 返回 builder，用户附加信息后手动调用 build 并 emit
         DiagnosticBuilder::new(Level::Error, msg).span(span)
     }
@@ -78,7 +82,13 @@ impl DiagCtxt {
         // 主消息
         writeln!(writer, "{}: {}", level_str, diag.message)?;
         // 位置（1‑based 行和列）
-        writeln!(writer, "  --> {}:{}:{}", file.name, loc_lo.line, loc_lo.col + 1)?;
+        writeln!(
+            writer,
+            "  --> {}:{}:{}",
+            file.name,
+            loc_lo.line,
+            loc_lo.col + 1
+        )?;
 
         // 打印源码行
         if let Some(line) = file.get_line(loc_lo.line) {
@@ -86,7 +96,7 @@ impl DiagCtxt {
             writeln!(writer, "   | {}", line)?;
 
             // 计算下划线
-            let start = loc_lo.col;          // 0‑based
+            let start = loc_lo.col; // 0‑based
             let end = if loc_lo.line == loc_hi.line {
                 loc_hi.col
             } else {

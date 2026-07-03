@@ -29,6 +29,19 @@ pub struct DiagnosticBuilder {
     diag: Diagnostic,
 }
 
+#[derive(Debug)]
+pub struct ParseError {
+    pub span: Span,
+}
+
+impl ParseError {
+    pub fn new(span: Span) -> Self {
+        Self { span }
+    }
+}
+
+pub type ParseResult<T> = Result<T, ParseError>;
+
 impl DiagnosticBuilder {
     pub fn new(level: Level, message: impl Into<String>) -> Self {
         Self {

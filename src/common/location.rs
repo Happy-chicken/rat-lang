@@ -28,8 +28,9 @@ impl SourceFile {
             .binary_search(&offset)
             .unwrap_or_else(|i| i.saturating_sub(1));
         let col = offset - self.line_starts[line];
+        println!("o{},{}", offset, self.line_starts[line]);
         Location {
-            line: line,
+            line: line + 1,
             col: col,
         }
     }
