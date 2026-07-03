@@ -42,6 +42,13 @@ impl ParseError {
 
 pub type ParseResult<T> = Result<T, ParseError>;
 
+#[derive(Debug)]
+pub struct ResolveError {
+    pub span :Span,
+}
+
+pub type ResolveResult<T> = Result<T, ResolveError>;
+
 impl DiagnosticBuilder {
     pub fn new(level: Level, message: impl Into<String>) -> Self {
         Self {
