@@ -8,12 +8,17 @@ pub struct ExprNode {
 }
 
 #[derive(Debug)]
-pub enum Expr {
+pub enum Literal {
     Int(i64),
     Bool(bool),
     Float(f32),
     Char(char),
     StringLiteral(String),
+}
+
+#[derive(Debug)]
+pub enum Expr {
+    Literal(Literal),
 
     Variable(String),
 
@@ -92,23 +97,17 @@ impl AstPrint for Expr {
         let branch_str = branch(is_last);
         match self {
             // 字面量 / 变量 —— writeln! 直接返回 Result
-            Expr::Int(v) => writeln!(output, "{}{}Int({})", prefix, branch_str, v),
-            Expr::Bool(v) => writeln!(output, "{}{}Bool({})", prefix, branch_str, v),
-            Expr::Float(v) => writeln!(output, "{}{}Float({})", prefix, branch_str, v),
-            Expr::Char(c) => writeln!(
-                output,
-                "{}{}Char('{}')",
-                prefix,
-                branch_str,
-                escape_char(*c)
-            ),
-            Expr::StringLiteral(s) => writeln!(
-                output,
-                "{}{}String(\"{}\")",
-                prefix,
-                branch_str,
-                escape_str(s)
-            ),
+            Expr::Literal(lit) => {
+                let lit_str = match lit {
+                    Literal::Int(i) => format!("Int({})", i),
+                    Literal::Bool(b) => format!("Bool({})", b),
+                    Literal::Float(f) => format!("Float({})", f),
+                    Literal::Char(c) => format!("Char('{}')", escape_char(*c)),
+                    Literal::StringLiteral(s) => format!("String(\"{}\")", escape_str(s)),
+                };
+                writeln!(output, "{}{}{}", prefix, branch_str, lit_str)
+            }
+
             Expr::Variable(name) => writeln!(output, "{}{}Variable({})", prefix, branch_str, name),
 
             // Assign —— 块末尾须显式 Ok(())

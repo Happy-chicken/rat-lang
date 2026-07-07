@@ -2,9 +2,16 @@ use crate::frontend::ast::expr::ExprNode;
 use crate::frontend::ast::printer::{AstPrint, branch, next_prefix};
 use crate::frontend::ast::typ::Type;
 use std::fmt::Write;
+use crate::common::span::Span;
 #[derive(Debug)]
 pub struct Block {
-    pub stmts: Vec<Stmt>,
+    pub stmts: Vec<StmtNode>,
+}
+
+#[derive(Debug)]
+pub struct StmtNode {
+    pub span: Span,
+    pub stmt: Stmt,
 }
 
 #[derive(Debug)]
@@ -38,8 +45,8 @@ impl AstPrint for Block {
         writeln!(output, "{}└──Block", prefix)?;
         let child_prefix = next_prefix(prefix, is_last);
         let count = self.stmts.len();
-        for (i, stmt) in self.stmts.iter().enumerate() {
-            stmt.print(&child_prefix, i == count - 1, output)?;
+        for (i, stmt_node) in self.stmts.iter().enumerate() {
+            stmt_node.stmt.print(&child_prefix, i == count - 1, output)?;
         }
         Ok(())
     }

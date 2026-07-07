@@ -21,7 +21,7 @@ static KEYWORDS: phf::Map<&'static str, TokenKind> = phf_map! {
     "for" => TokenKind::For,
 
     "def" => TokenKind::Def,
-    "var" => TokenKind::Var,
+    "let" => TokenKind::Let,
     "decl" => TokenKind::Decl,
 
     "if" => TokenKind::If,

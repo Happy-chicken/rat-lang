@@ -1,6 +1,6 @@
 // common/error.rs
 use crate::common::span::Span;
-
+use crate::frontend::type_checker::{typ::Type, type_ctx::TypeVar};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Level {
     Error,
@@ -48,6 +48,12 @@ pub struct ResolveError {
 }
 
 pub type ResolveResult<T> = Result<T, ResolveError>;
+
+#[derive(Debug)]
+pub enum UnifyError {
+    Mismatch { expected: Type, found: Type },
+    InfiniteType { var: TypeVar, ty: Type },
+}
 
 impl DiagnosticBuilder {
     pub fn new(level: Level, message: impl Into<String>) -> Self {

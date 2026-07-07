@@ -1,4 +1,5 @@
 use std::rc::Rc;
+use std::cell::RefCell;
 use super::scope::{Scope, ScopeKind};
 use super::symbol::Symbol;
 
@@ -15,25 +16,27 @@ impl SymbolTable {
         self.scopes.push(Scope::new(kind));
     }
 
-    pub fn exit_scope(&mut self) {
-        self.scopes.pop();
-        assert!(self.scopes.len() >= 1);
+    pub fn exit_scope(&mut self) -> Scope {
+        assert!(self.scopes.len() >= 1, "cannot pop the global scope");
+        self.scopes.pop().unwrap()
     }
 
     /// 在当前作用域声明符号；重复定义返回 Err
-    pub fn declare(&mut self, symbol: Symbol) -> Result<(), Symbol> {
-        let mut symbol = symbol;
+    pub fn declare(&mut self, mut symbol: Symbol) -> Result<(), Rc<RefCell<Symbol>>> {
         symbol.scope_depth = self.scopes.len() - 1;
-        let rc = Rc::new(symbol);
-        let current = self.scopes.last_mut().unwrap();
-        match current.insert(rc.clone()) {
-            Some(existing) => Err((*existing).clone()), // 冲突，返回旧符号供报错
+        let current = self.scopes.last_mut().expect("at least global scope exists");
+        match current.insert(symbol) {
+            Some(existing) => Err(existing), // 冲突，返回旧符号供报错
             None => Ok(()),
         }
     }
 
+    pub fn resolve_global(&self, name: &str) -> Option<Rc<RefCell<Symbol>>> {
+        self.scopes.first().unwrap().get(name)
+    }
+
     /// 从内到外逐层查找（词法作用域链）
-    pub fn resolve(&self, name: &str) -> Option<Rc<Symbol>> {
+    pub fn resolve(&self, name: &str) -> Option<Rc<RefCell<Symbol>>> {
         for scope in self.scopes.iter().rev() {
             if let Some(sym) = scope.get(name) {
                 return Some(sym);
@@ -49,5 +52,9 @@ impl SymbolTable {
 
     pub fn current_scope_kind(&self) -> ScopeKind {
         self.scopes.last().unwrap().kind
+    }
+
+    pub fn depth(&self) -> usize {
+        self.scopes.len()
     }
 }

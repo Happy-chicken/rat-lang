@@ -70,7 +70,7 @@ impl DiagCtxt {
         // 获取主标签的位置
         let (file, loc_lo, loc_hi) = if let Some(ref primary) = diag.primary_label {
             // TODO: 改进文件查找（用 span 中的 file_id）
-            let (name, file) = self.files.iter().next().unwrap();
+            let (_, file) = self.files.iter().next().unwrap();
             let loc_lo = file.lookup_pos(primary.span.low);
             let loc_hi = file.lookup_pos(primary.span.high);
             (file, loc_lo, loc_hi)

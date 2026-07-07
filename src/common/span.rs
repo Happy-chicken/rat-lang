@@ -1,7 +1,3 @@
-// common/span.rs
-use crate::common::location::SourceFile;
-use std::sync::Arc;
-
 /// 字节偏移，类型安全。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct BytePos(pub usize);

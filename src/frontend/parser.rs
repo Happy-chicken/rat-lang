@@ -113,7 +113,7 @@ impl<'a, 'diag> Parser<'a, 'diag> {
             }
             // Stop *before* keywords that begin new constructs.
             if self.check_any(&[
-                TokenKind::Var,
+                TokenKind::Let,
                 TokenKind::Def,
                 TokenKind::Class,
                 TokenKind::If,
@@ -142,32 +142,32 @@ impl<'a, 'diag> Parser<'a, 'diag> {
         Program { items }
     }
 
-    fn parse_item(&mut self) -> ParseResult<Item> {
+    fn parse_item(&mut self) -> ParseResult<ItemNode> {
         // 解析函数、变量等
         match self.peek().map(|t| t.kind) {
-            Some(TokenKind::Decl) => Ok(Item::FunctionDecl(self.parse_func_decl()?)),
-            Some(TokenKind::Def) => Ok(Item::FunctionDef(self.parse_function()?)),
-            Some(TokenKind::Class) => Ok(Item::Class(self.parse_class()?)),
-            Some(TokenKind::Trait) => Ok(Item::Trait(self.parse_trait()?)),
-            Some(TokenKind::Impl) => Ok(Item::Impl(self.parse_impl()?)),
+            Some(TokenKind::Decl) => Ok(ItemNode { span: self.current_span(), item: Item::FunctionDecl(self.parse_func_decl()?)}),
+            Some(TokenKind::Def) => Ok(ItemNode { span: self.current_span(), item: Item::FunctionDef(self.parse_function()?)}),
+            Some(TokenKind::Class) => Ok(ItemNode { span: self.current_span(), item: Item::Class(self.parse_class()?)}),
+            Some(TokenKind::Trait) => Ok(ItemNode { span: self.current_span(), item: Item::Trait(self.parse_trait()?)}),
+            Some(TokenKind::Impl) => Ok(ItemNode { span: self.current_span(), item: Item::Impl(self.parse_impl()?)}),
             // TODO: global variable
-            // TokenKind::Var => self.parse_var_def_stmt(),
-            _ => self.unexpected("Expected 'var', 'def', 'decl', 'class', 'trait', 'impl'."),
+            // TokenKind::Let => self.parse_var_def_stmt(),
+            _ => self.unexpected("Expected 'let', 'def', 'decl', 'class', 'trait', 'impl'."),
         }
     }
 
-    fn parse_stmt(&mut self) -> ParseResult<Stmt> {
+    fn parse_stmt(&mut self) -> ParseResult<StmtNode> {
         // 解析语句
         match self.peek() {
             Some(token) => match token.kind {
                 TokenKind::If => self.parse_if_stmt(),
                 TokenKind::While => self.parse_while_stmt(),
                 TokenKind::Return => self.parse_return_stmt(),
-                TokenKind::Var => self.parse_var_def_stmt(),
+                TokenKind::Let => self.parse_var_def_stmt(),
                 _ => {
                     let expr = self.parse_expr()?;
                     self.consume(TokenKind::Semicolon, "Expected ';' after expression.")?;
-                    Ok(Stmt::ExprStmt(expr))
+                    Ok(StmtNode { span: expr.span, stmt: Stmt::ExprStmt(expr) })
                 }
             },
             None => self.unexpected("Unexpected end of input"),
@@ -421,27 +421,27 @@ impl<'a, 'diag> Parser<'a, 'diag> {
         match token.kind {
             TokenKind::IntLiteral => Ok(ExprNode {
                 span: token.span,
-                expr: Expr::Int(token.lexeme.parse().unwrap()),
+                expr: Expr::Literal(Literal::Int(token.lexeme.parse().unwrap())),
             }),
             TokenKind::FloatLiteral => Ok(ExprNode {
                 span: token.span,
-                expr: Expr::Float(token.lexeme.parse().unwrap()),
+                expr: Expr::Literal(Literal::Float(token.lexeme.parse().unwrap())),
             }),
             TokenKind::True => Ok(ExprNode {
                 span: token.span,
-                expr: Expr::Bool(true),
+                expr: Expr::Literal(Literal::Bool(true)),
             }),
             TokenKind::False => Ok(ExprNode {
                 span: token.span,
-                expr: Expr::Bool(false),
+                expr: Expr::Literal(Literal::Bool(false)),
             }),
             TokenKind::CharLiteral => Ok(ExprNode {
                 span: token.span,
-                expr: Expr::Char(token.lexeme.chars().next().unwrap()),
+                expr: Expr::Literal(Literal::Char(token.lexeme.chars().next().unwrap())),
             }),
             TokenKind::StringLiteral => Ok(ExprNode {
                 span: token.span,
-                expr: Expr::StringLiteral(token.lexeme),
+                expr: Expr::Literal(Literal::StringLiteral(token.lexeme)),
             }),
             TokenKind::Identifier => Ok(ExprNode {
                 span: token.span,
@@ -475,7 +475,7 @@ impl<'a, 'diag> Parser<'a, 'diag> {
         }
     }
 
-    fn parse_if_stmt(&mut self) -> ParseResult<Stmt> {
+    fn parse_if_stmt(&mut self) -> ParseResult<StmtNode> {
         // 解析 if 语句
         self.consume(
             TokenKind::If,
@@ -496,15 +496,16 @@ impl<'a, 'diag> Parser<'a, 'diag> {
         } else {
             Block { stmts: Vec::new() }
         };
-        Ok(Stmt::If {
-            condition: condition,
-            then_branch: then_branch,
-            elif_branch: elif_branches,
-            else_branch: else_branch,
-        })
+        Ok(StmtNode { span: self.current_span(), 
+            stmt: Stmt::If {
+                condition: condition,
+                then_branch: then_branch,
+                elif_branch: elif_branches,
+                else_branch: else_branch,
+        } })
     }
 
-    fn parse_while_stmt(&mut self) -> ParseResult<Stmt> {
+    fn parse_while_stmt(&mut self) -> ParseResult<StmtNode> {
         // 解析 while 语句
         self.consume(
             TokenKind::While,
@@ -512,15 +513,20 @@ impl<'a, 'diag> Parser<'a, 'diag> {
         )?;
         let condition = self.parse_expr()?;
         let body = self.parse_block()?;
-        Ok(Stmt::Loop {
-            condition: condition,
-            body: body,
-        })
+        Ok(
+            StmtNode { 
+                span: self.current_span(), 
+                stmt: Stmt::Loop {
+                    condition: condition,
+                    body: body,
+                    }
+                }
+            )
     }
 
-    fn parse_return_stmt(&mut self) -> ParseResult<Stmt> {
+    fn parse_return_stmt(&mut self) -> ParseResult<StmtNode> {
         // 解析 return 语句
-        self.consume(
+        let return_token = self.consume(
             TokenKind::Return,
             "Expected 'return' at the beginning of return statement.",
         )?;
@@ -530,14 +536,14 @@ impl<'a, 'diag> Parser<'a, 'diag> {
             None
         };
         self.consume(TokenKind::Semicolon, "Expected ';' after return statement.")?;
-        Ok(Stmt::Return(expr))
+        Ok(StmtNode { span: return_token.span, stmt: Stmt::Return(expr) })
     }
 
-    fn parse_var_def_stmt(&mut self) -> ParseResult<Stmt> {
+    fn parse_var_def_stmt(&mut self) -> ParseResult<StmtNode> {
         // 解析变量定义语句
         self.consume(
-            TokenKind::Var,
-            "Expected 'var' at the beginning of variable definition.",
+            TokenKind::Let,
+            "Expected 'let' at the beginning of variable definition.",
         )?;
         let var_name = self.consume(TokenKind::Identifier, "Expected variable name.")?;
         let var_name = var_name.lexeme;
@@ -553,11 +559,13 @@ impl<'a, 'diag> Parser<'a, 'diag> {
             TokenKind::Semicolon,
             "Expected ';' after variable definition.",
         )?;
-        Ok(Stmt::VarDef {
-            name: var_name,
-            ty: var_type,
-            init: var_init,
-        })
+        Ok(StmtNode { 
+                span: self.current_span(), 
+                stmt: Stmt::VarDef {
+                    name: var_name,
+                    ty: var_type,
+                    init: var_init,
+        } })
     }
 
     fn parse_block(&mut self) -> ParseResult<Block> {
@@ -759,7 +767,7 @@ impl<'a, 'diag> Parser<'a, 'diag> {
 
     fn parse_fields(&mut self) -> ParseResult<Field> {
         // 解析类的字段定义
-        self.consume(TokenKind::Var, "Expected 'var' before field definition.")?;
+        self.consume(TokenKind::Let, "Expected 'let' before field definition.")?;
         let field_name = self.consume(TokenKind::Identifier, "Expected field name.")?;
         let field_name = field_name.lexeme;
         self.consume(TokenKind::Colon, "Expected ':' after field name.")?;

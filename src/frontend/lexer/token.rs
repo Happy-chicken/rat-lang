@@ -53,7 +53,7 @@ pub enum TokenKind {
     // declare
     Decl,
     Def,
-    Var,
+    Let,
     // return
     Return,
     // none
