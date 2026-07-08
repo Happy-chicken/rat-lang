@@ -231,13 +231,9 @@ impl Resolver {
             Type::Class(name) => {
                 deps.push(name.as_str());
             }
-            Type::Ptr(inner) | Type::List(inner) => {
-                self.collect_class_deps(inner, deps);
-            }
-            Type::Array(_, inner) => {
-                self.collect_class_deps(inner, deps);
-            }
-            Type::Int | Type::Float | Type::Bool | Type::Char | Type::Str | Type::Void => {}
+            Type::Ptr(_) | Type::List(_) | Type::Array(_, _)
+            | Type::Int | Type::Float | Type::Bool
+            | Type::Char | Type::Str | Type::Void => {}
         }
     }
 
