@@ -24,6 +24,7 @@ impl Pass for SemaChecker {
             match &item_node.item {
                 Item::FunctionDef(def) => self.check_function(def, ctx, diag),
                 Item::Impl(imp) => self.check_impl(imp, ctx, diag),
+                Item::VarDef(global) => self.check_global_var(global, ctx, diag),
                 _ => {}
             }
         }
@@ -72,7 +73,7 @@ impl SemaChecker {
             diag.emit(err);
         }
 
-        if let Some(ref trait_name) = imp.trait_name {
+        if let Some(trait_name) = &imp.trait_name {
             if ctx.symbol_table.resolve_global(trait_name).is_none() {
                 let err = diag
                     .error(dummy_span, format!("trait `{}` not found", trait_name))
@@ -173,6 +174,10 @@ impl SemaChecker {
                     diag.emit(err);
                 }
             }
+
+            Stmt::BlockStmt(block) => {
+                self.check_block(block, ctx, diag);
+            }
         }
     }
 
@@ -249,6 +254,17 @@ impl SemaChecker {
                     self.check_expr(arg, ctx, diag);
                 }
             }
+        }
+    }
+
+    fn check_global_var(
+        &mut self,
+        global: &GlobalVar,
+        ctx: &mut SemaCtxt,
+        diag: &mut DiagCtxt,
+    ) {
+        if let Some(ref init_expr) = global.init {
+            self.check_expr(init_expr, ctx, diag);
         }
     }
 }

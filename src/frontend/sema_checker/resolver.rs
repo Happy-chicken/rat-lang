@@ -34,6 +34,9 @@ impl Pass for Resolver {
                 Item::FunctionDef(_) | Item::FunctionDecl(_) => {
                     self.declare_value_item(item_node, ctx, diag)
                 }
+                Item::VarDef(global) => {
+                    self.declare_global_var(global, item_node.span, ctx, diag);
+                }
                 _ => {}
             }
         }
@@ -192,6 +195,22 @@ impl Resolver {
         self.declare_top_level(symbol, ctx, diag);
     }
 
+    fn declare_global_var(
+        &mut self,
+        global: &GlobalVar,
+        span: Span,
+        ctx: &mut SemaCtxt,
+        diag: &mut DiagCtxt,
+    ) {
+        let symbol = Symbol::new_variable(
+            global.name.clone(),
+            global.ty.clone(),
+            false,
+            span,
+        );
+        self.declare_top_level(symbol, ctx, diag);
+    }
+
     fn check_struct_recursion(&mut self, program: &Program, diag: &mut DiagCtxt) {
         let mut deps: HashMap<&str, Vec<&str>> = HashMap::new();
         let mut spans: HashMap<&str, Span> = HashMap::new();
@@ -231,8 +250,7 @@ impl Resolver {
             Type::Class(name) => {
                 deps.push(name.as_str());
             }
-            Type::Ptr(_) | Type::List(_) | Type::Array(_, _)
-            | Type::Int | Type::Float | Type::Bool
+            Type::Ptr(_) | Type::List(_) | Type::Int | Type::Float | Type::Bool
             | Type::Char | Type::Str | Type::Void => {}
         }
     }

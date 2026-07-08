@@ -111,6 +111,8 @@ impl FlowAnalyzer {
 
             Stmt::Break | Stmt::Continue => Terminator::Diverges,
 
+            Stmt::BlockStmt(block) => self.analyze_block(block, diag),
+
             Stmt::ExprStmt(_) | Stmt::VarDef { .. } => Terminator::FallsThrough,
 
             Stmt::If {

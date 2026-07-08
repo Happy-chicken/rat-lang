@@ -64,12 +64,12 @@ impl Symbol {
         Symbol { kind, name: name.into(), ty: None, scope_depth: 0, span }
     }
 
-    pub fn new_variable(name: impl Into<String>, ty: Type, is_mutable: bool, span: Span) -> Self {
+    pub fn new_variable(name: impl Into<String>, ty: Option<Type>, is_mutable: bool, span: Span) -> Self {
         let kind = SymbolKind::Variable {
             is_mutable,
             is_initialized: false,
         };
-        Symbol { kind, name: name.into(), ty: Some(ty), scope_depth: 0, span }
+        Symbol { kind, name: name.into(), ty, scope_depth: 0, span }
     }
 
     pub fn is_type(&self) -> bool {
