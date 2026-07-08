@@ -14,18 +14,13 @@ use midend::ir_emitter::IrEmitter;
 
 fn main() {
     let src = r#"
-    let g_offset:int = 100;
     def add(a:int, b:int)->int {
-        return a + b + g_offset;
+        return a + b;
     }
     def main()->int {
         let x:int = 10;
-        {
-            let x:int = 99;
-            let y:int = x + 1;
-        }
-        let z:int = x * 2 + g_offset;
-        return z;
+        let y:int = 20;
+        return add(x, y);
     }
     "#;
     let file = SourceFile::new("main.rat".to_string(), src.to_string());

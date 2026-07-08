@@ -298,6 +298,55 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
                 let rhs_val = self.compile_expr(rhs);
                 self.compile_binary(op, lhs_val, rhs_val, span)
             }
+            Expr::Call { callee, args } => {
+                if let Expr::Variable(ref name) = callee.expr {
+                    match self.module.get_function(name) {
+                        Some(function) => {
+                            let mut arg_vals: Vec<BasicValueEnum> = Vec::new();
+                            for arg in args {
+                                arg_vals.push(self.compile_expr(arg));
+                            }
+                            let arg_refs: Vec<_> =
+                                arg_vals.iter().map(|v| (*v).into()).collect();
+                            match self.builder.build_call(function, &arg_refs, "call") {
+                                Ok(call) => call.try_as_basic_value().basic().unwrap_or(zero),
+                                Err(e) => {
+                                    let d = self
+                                        .diag
+                                        .error(
+                                            span,
+                                            format!(
+                                                "failed to call function '{}': {}",
+                                                name, e
+                                            ),
+                                        )
+                                        .build();
+                                    self.diag.emit(d);
+                                    zero
+                                }
+                            }
+                        }
+                        None => {
+                            let d = self
+                                .diag
+                                .error(
+                                    span,
+                                    format!("undefined function: {}", name),
+                                )
+                                .build();
+                            self.diag.emit(d);
+                            zero
+                        }
+                    }
+                } else {
+                    let d = self
+                        .diag
+                        .error(span, "indirect function calls are not supported")
+                        .build();
+                    self.diag.emit(d);
+                    zero
+                }
+            }
             _ => {
                 let d = self
                     .diag

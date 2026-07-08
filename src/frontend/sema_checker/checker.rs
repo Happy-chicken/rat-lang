@@ -4,7 +4,7 @@ use crate::frontend::ast::{Program, expr::*, item::*, stmt::*};
 use crate::frontend::sema_checker::pass::Pass;
 use crate::frontend::sema_checker::scope::ScopeKind;
 use crate::frontend::sema_checker::sema_ctx::SemaCtxt;
-use crate::frontend::sema_checker::symbol::Symbol;
+use crate::frontend::sema_checker::symbol::{Symbol, SymbolKind};
 
 pub struct SemaChecker {}
 
@@ -215,11 +215,27 @@ impl SemaChecker {
                 self.check_expr(callee, ctx, diag);
                 if let Expr::Variable(ref name) = callee.expr {
                     if let Some(sym) = ctx.symbol_table.resolve(name) {
-                        if !sym.borrow().is_callable() {
+                        let s = sym.borrow();
+                        if !s.is_callable() {
                             let err = diag
                                 .error(expr_node.span, format!("`{}` is not callable", name))
                                 .build();
                             diag.emit(err);
+                        } else if let SymbolKind::Function { params, .. } = &s.kind {
+                            if params.len() != args.len() {
+                                let err = diag
+                                    .error(
+                                        expr_node.span,
+                                        format!(
+                                            "function `{}` expects {} arguments, got {}",
+                                            name,
+                                            params.len(),
+                                            args.len()
+                                        ),
+                                    )
+                                    .build();
+                                diag.emit(err);
+                            }
                         }
                     }
                 }
