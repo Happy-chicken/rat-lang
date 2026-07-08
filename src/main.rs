@@ -1,22 +1,31 @@
+mod backend;
 mod common;
 mod frontend;
+mod midend;
+use backend::jit::JitRunner;
 use common::DiagCtxt;
 use common::location::SourceFile;
 use frontend::ast::printer::AstPrint;
 use frontend::lexer::Lexer;
 use frontend::parser::Parser;
 use frontend::sema_checker::AnalysisPipeline;
+use inkwell::context::Context;
+use midend::ir_emitter::IrEmitter;
 
 fn main() {
     let src = r#"
-    let x:int = 1;
-    def main(a:ptr<int>)->int {
-    let x:int = 1;
-    {
-        let local_var:int = 2;
+    let g_offset:int = 100;
+    def add(a:int, b:int)->int {
+        return a + b + g_offset;
     }
-    let l:list<int> = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-    return x;
+    def main()->int {
+        let x:int = 10;
+        {
+            let x:int = 99;
+            let y:int = x + 1;
+        }
+        let z:int = x * 2 + g_offset;
+        return z;
     }
     "#;
     let file = SourceFile::new("main.rat".to_string(), src.to_string());
@@ -32,10 +41,27 @@ fn main() {
     ast.print("", true, &mut output).unwrap();
     println!("{}", output);
 
-    // let mut sema_ctx = SemaCtxt::new();
     let mut analysis_pipeline = AnalysisPipeline::standard();
     let sema_ctx = analysis_pipeline.run(&ast, &mut diag_ctxt);
     sema_ctx.symbol_table.dump();
     diag_ctxt.print_all(&mut std::io::stdout()).expect("");
-    // print!("{:#?}", ast);
+
+    println!("\n=== LLVM IR ===");
+    let context = Context::create();
+    let mut emitter = IrEmitter::new(&context, "main", &mut diag_ctxt);
+    emitter.generate(&ast, &sema_ctx);
+
+    emitter.dump_module();
+
+    if !emitter.has_errors() {
+        match JitRunner::new(emitter.module()) {
+            Ok(runner) => unsafe {
+                match runner.call_main() {
+                    Ok(result) => println!("\n>> main() returned: {}", result),
+                    Err(e) => eprintln!("JIT call failed: {}", e),
+                }
+            },
+            Err(e) => eprintln!("JIT init failed: {}", e),
+        }
+    }
 }

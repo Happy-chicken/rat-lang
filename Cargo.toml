@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 phf = { version = "0.14.0", features = ["macros"] }
 thiserror = "1.0"
+inkwell = { version = "0.9", features = ["llvm20-1-prefer-dynamic"] }
 
 [[test]]
 name = "integration"
