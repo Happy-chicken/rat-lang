@@ -8,8 +8,14 @@ use frontend::parser::Parser;
 use frontend::sema_checker::AnalysisPipeline;
 
 fn main() {
-    let src = r#"def main() {
-    let x:int;
+    let src = r#"
+    let x:int = 1;
+    def main(a:ptr<int>)->int {
+    let x:int = 1;
+    {
+        let local_var:int = 2;
+    }
+    let l:list<int> = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
     return x;
     }
     "#;

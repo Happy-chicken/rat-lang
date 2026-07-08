@@ -26,7 +26,7 @@ fn diag_output(diag: &DiagCtxt) -> String {
     String::from_utf8_lossy(&buf).to_string()
 }
 
-fn run_cat_case(path: &Path) {
+fn run_cat_case(path: &Path, display_name: &str) {
     let src = fs::read_to_string(path)
         .unwrap_or_else(|e| panic!("failed to read {}: {}", path.display(), e));
 
@@ -46,13 +46,12 @@ fn run_cat_case(path: &Path) {
 
     let diag = run_pipeline(&src);
     let output = diag_output(&diag);
-    let name = path.file_name().unwrap().to_string_lossy();
 
     if should_pass {
         assert!(
             !diag.has_errors(),
             "{}: expected no errors but got:\n{}",
-            name,
+            display_name,
             output
         );
     }
@@ -61,7 +60,7 @@ fn run_cat_case(path: &Path) {
         assert!(
             diag.has_errors(),
             "{}: expected errors but got none",
-            name
+            display_name
         );
     }
 
@@ -69,7 +68,7 @@ fn run_cat_case(path: &Path) {
         assert!(
             output.contains(msg),
             "{}: expected error containing '{}', but output was:\n{}",
-            name,
+            display_name,
             msg,
             output
         );
@@ -79,44 +78,62 @@ fn run_cat_case(path: &Path) {
         assert!(
             output.contains(msg),
             "{}: expected warning containing '{}', but output was:\n{}",
-            name,
+            display_name,
             msg,
             output
         );
     }
 }
 
+fn collect_cat_files(dir: &Path) -> Vec<(String, std::path::PathBuf)> {
+    let mut result = Vec::new();
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.filter_map(|e| e.ok()) {
+            let path = entry.path();
+            if path.is_dir() {
+                result.extend(collect_cat_files(&path));
+            } else if path.extension().map_or(false, |ext| ext == "cat") {
+                let parent = path.parent().unwrap().file_name().unwrap().to_string_lossy();
+                let fname = path.file_name().unwrap().to_string_lossy();
+                let display = format!("{}/{}", parent, fname);
+                result.push((display, path));
+            }
+        }
+    }
+    result.sort_by(|a, b| a.0.cmp(&b.0));
+    result
+}
+
 #[test]
 fn all_cat_cases() {
     let cases_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests").join("cases");
-    let mut entries: Vec<_> = fs::read_dir(&cases_dir)
-        .expect("cases directory not found")
-        .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().map_or(false, |ext| ext == "cat"))
-        .collect();
-    entries.sort_by_key(|e| e.file_name());
+    let entries = collect_cat_files(&cases_dir);
 
     assert!(!entries.is_empty(), "no .cat test cases found in {}", cases_dir.display());
 
     let mut failures = vec![];
-    for entry in &entries {
-        let path = entry.path();
-        let name = path.file_name().unwrap().to_string_lossy().to_string();
-        print!("Running test case: {}", name);
-        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| run_cat_case(&path))) {
-            Ok(()) => {println!("{} - OK", name);},
+    for (display_name, path) in &entries {
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            run_cat_case(path, display_name)
+        })) {
+            Ok(()) => {}
             Err(e) => {
                 let msg = e
                     .downcast_ref::<String>()
                     .cloned()
                     .or_else(|| e.downcast_ref::<&str>().map(|s| s.to_string()))
                     .unwrap_or_else(|| "unknown panic".to_string());
-                failures.push(format!("  FAIL {}: {}", name, msg));
+                failures.push(format!("  FAIL {}: {}", display_name, msg));
             }
         }
     }
 
     if !failures.is_empty() {
-        panic!("\n{}/{} test cases failed:\n{}", failures.len(), entries.len(), failures.join("\n"));
+        panic!(
+            "\n{}/{} test cases failed:\n{}",
+            failures.len(),
+            entries.len(),
+            failures.join("\n")
+        );
     }
 }

@@ -1,32 +1,485 @@
-use crate::frontend::ast::{ stmt::*, expr::*}; 
+use crate::frontend::ast::expr::*;
 use crate::common::{DiagCtxt, span::Span};
-use crate::frontend::sema_checker::{
-    sema_ctx::SemaCtxt
-};
-use crate::frontend::type_checker::{
-    typ::Type,
-};
+use crate::frontend::sema_checker::sema_ctx::SemaCtxt;
+use crate::frontend::type_checker::typ::{Type, PrimType};
+use crate::frontend::type_checker::unifier::Unifier;
+use crate::common::error::UnifyError;
+
 pub struct TypeInferer;
 
 impl TypeInferer {
     pub fn new() -> Self {
         TypeInferer
     }
-    // --- 表达式类型推导,返回推导出的类型 ---
-    pub fn infer_expr(&mut self, expr: &Expr, ctx: &mut SemaCtxt, diag: &mut DiagCtxt) -> Type{Type::Error}
 
-    fn infer_literal(&mut self, lit: &Literal) -> Type{Type::Error}
-    fn infer_ident(&mut self, name: &str, span: Span, ctx: &SemaCtxt, diag: &mut DiagCtxt) -> Type{Type::Error}
-    fn infer_binary(&mut self, op: &BinaryOp, lhs: &Expr, rhs: &Expr, span: Span, ctx: &mut SemaCtxt, diag: &mut DiagCtxt) -> Type{Type::Error}
-    fn infer_unary(&mut self, op: &UnaryOp, operand: &Expr, span: Span, ctx: &mut SemaCtxt, diag: &mut DiagCtxt) -> Type{Type::Error}
-    fn infer_call(&mut self, callee: &Expr, args: &[Expr], span: Span, ctx: &mut SemaCtxt, diag: &mut DiagCtxt) -> Type{Type::Error}
-    fn infer_field_access(&mut self, base: &Expr, field: &str, span: Span, ctx: &mut SemaCtxt, diag: &mut DiagCtxt) -> Type{Type::Error}
-    fn infer_index(&mut self, base: &Expr, index: &Expr, span: Span, ctx: &mut SemaCtxt, diag: &mut DiagCtxt) -> Type{Type::Error}
-    fn infer_if_expr(&mut self, cond: &Expr, then: &Block, els: &Option<Block>, span: Span, ctx: &mut SemaCtxt, diag: &mut DiagCtxt) -> Type{Type::Error}
-    fn infer_struct_literal(&mut self, name: &str, fields: &[(String, Expr)], span: Span, ctx: &mut SemaCtxt, diag: &mut DiagCtxt) -> Type{Type::Error}
-    fn infer_array_literal(&mut self, elems: &[Expr], span: Span, ctx: &mut SemaCtxt, diag: &mut DiagCtxt) -> Type{Type::Error}
-    // fn infer_tuple(&mut self, elems: &[Expr], ctx：&mut SemaCtxt, diag：&mut DiagCtxt) -> Type{}
+    pub fn infer_expr(
+        &mut self,
+        expr: &Expr,
+        span: Span,
+        ctx: &mut SemaCtxt,
+        diag: &mut DiagCtxt,
+    ) -> Type {
+        match expr {
+            Expr::Literal(lit) => self.infer_literal(lit),
+            Expr::Variable(name) => self.infer_ident(name, span, ctx, diag),
+            Expr::Assign { target, value } => self.infer_assign(target, value, span, ctx, diag),
+            Expr::Binary { op, lhs, rhs } => self.infer_binary(op, lhs, rhs, span, ctx, diag),
+            Expr::Unary { op, expr: inner } => self.infer_unary(op, inner, span, ctx, diag),
+            Expr::Call { callee, args } => self.infer_call(callee, args, span, ctx, diag),
+            Expr::Member { object, field } => self.infer_field_access(object, field, span, ctx, diag),
+            Expr::Index { object, index } => self.infer_index(object, index, span, ctx, diag),
+            Expr::List { elements } => {
+                self.infer_list_literal(elements, span, ctx, diag)
+            }
+            Expr::New { cons, args } => self.infer_new(cons, args, span, ctx, diag),
+        }
+    }
 
-    // --- let 语句的双向推导:有标注时检查,无标注时从初始值推导 ---
-    fn infer_let_binding(&mut self, declared_ty: &Option<Type>, init: &Option<Expr>, span: Span, ctx: &mut SemaCtxt, diag: &mut DiagCtxt) -> Type{Type::Error}
+    pub fn infer_let_binding(
+        &mut self,
+        declared_ty: &Option<Type>,
+        init: &Option<ExprNode>,
+        span: Span,
+        ctx: &mut SemaCtxt,
+        diag: &mut DiagCtxt,
+    ) -> Type {
+        let inferred = if let Some(init_expr) = init {
+            self.infer_expr(&init_expr.expr, init_expr.span, ctx, diag)
+        } else {
+            ctx.type_ctx.fresh_type_var()
+        };
+
+        match declared_ty {
+            Some(decl_ty) => {
+                let mut unifier = Unifier::new(&mut ctx.type_ctx);
+                match unifier.unify(&inferred, decl_ty) {
+                    Ok(ty) => ty,
+                    Err(UnifyError::Mismatch { expected, found }) => {
+                        let err = diag
+                            .error(
+                                span,
+                                format!(
+                                    "type mismatch: expected {}, found {}",
+                                    expected.display_name(),
+                                    found.display_name()
+                                ),
+                            )
+                            .build();
+                        diag.emit(err);
+                        Type::Error
+                    }
+                    Err(UnifyError::InfiniteType { .. }) => {
+                        let err = diag
+                            .error(span, "recursive type in variable binding")
+                            .build();
+                        diag.emit(err);
+                        Type::Error
+                    }
+                }
+            }
+            None => inferred,
+        }
+    }
+
+    // --- private helpers ---
+
+    fn infer_literal(&mut self, lit: &Literal) -> Type {
+        match lit {
+            Literal::Int(_) => Type::Prim(PrimType::Int),
+            Literal::Bool(_) => Type::Prim(PrimType::Bool),
+            Literal::Float(_) => Type::Prim(PrimType::Float),
+            Literal::Char(_) => Type::Prim(PrimType::Char),
+            Literal::StringLiteral(_) => Type::Prim(PrimType::Str),
+        }
+    }
+
+    fn infer_ident(
+        &mut self,
+        name: &str,
+        span: Span,
+        ctx: &SemaCtxt,
+        diag: &mut DiagCtxt,
+    ) -> Type {
+        if let Some(sym) = ctx.symbol_table.resolve(name) {
+            let s = sym.borrow();
+            match &s.kind {
+                crate::frontend::sema_checker::symbol::SymbolKind::Variable { .. }
+                | crate::frontend::sema_checker::symbol::SymbolKind::Parameter { .. } => {
+                    s.ty.clone().map_or(Type::Error, |ast_ty| ast_type_to_tc(&ast_ty))
+                }
+                crate::frontend::sema_checker::symbol::SymbolKind::Function {
+                    params,
+                    return_type,
+                } => {
+                    let p: Vec<Type> = params.iter().map(ast_type_to_tc).collect();
+                    let r = Box::new(ast_type_to_tc(return_type));
+                    Type::Func(p, r)
+                }
+                crate::frontend::sema_checker::symbol::SymbolKind::Class { .. } => {
+                    Type::Class(name.to_string())
+                }
+                _ => Type::Error,
+            }
+        } else {
+            Type::Error
+        }
+    }
+
+    fn infer_assign(
+        &mut self,
+        target: &ExprNode,
+        value: &ExprNode,
+        span: Span,
+        ctx: &mut SemaCtxt,
+        diag: &mut DiagCtxt,
+    ) -> Type {
+        let lhs_ty = self.infer_expr(&target.expr, target.span, ctx, diag);
+        let rhs_ty = self.infer_expr(&value.expr, value.span, ctx, diag);
+
+        let mut unifier = Unifier::new(&mut ctx.type_ctx);
+        match unifier.unify(&lhs_ty, &rhs_ty) {
+            Ok(ty) => ty,
+            Err(_) => {
+                let err = diag
+                    .error(
+                        span,
+                        format!(
+                            "type mismatch in assignment: {} and {}",
+                            lhs_ty.display_name(),
+                            rhs_ty.display_name()
+                        ),
+                    )
+                    .build();
+                diag.emit(err);
+                Type::Error
+            }
+        }
+    }
+
+    fn infer_binary(
+        &mut self,
+        op: &BinaryOp,
+        lhs: &ExprNode,
+        rhs: &ExprNode,
+        span: Span,
+        ctx: &mut SemaCtxt,
+        diag: &mut DiagCtxt,
+    ) -> Type {
+        let lhs_ty = self.infer_expr(&lhs.expr, lhs.span, ctx, diag);
+        let rhs_ty = self.infer_expr(&rhs.expr, rhs.span, ctx, diag);
+
+        match op {
+            BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div => {
+                let mut unifier = Unifier::new(&mut ctx.type_ctx);
+                if let Err(_) = unifier.unify(&lhs_ty, &rhs_ty) {
+                    let err = diag
+                        .error(
+                            span,
+                            format!(
+                                "arithmetic on mismatched types: {} and {}",
+                                lhs_ty.display_name(),
+                                rhs_ty.display_name()
+                            ),
+                        )
+                        .build();
+                    diag.emit(err);
+                    return Type::Error;
+                }
+
+                let resolved = ctx.type_ctx.resolve_type(&lhs_ty);
+                if !resolved.is_numeric() && resolved != Type::Error {
+                    let err = diag
+                        .error(
+                            span,
+                            format!(
+                                "arithmetic requires numeric types, got {}",
+                                resolved.display_name()
+                            ),
+                        )
+                        .build();
+                    diag.emit(err);
+                    return Type::Error;
+                }
+                resolved
+            }
+
+            BinaryOp::Eq | BinaryOp::NotEq | BinaryOp::Lt | BinaryOp::Gt
+            | BinaryOp::Le | BinaryOp::Ge => {
+                let mut unifier = Unifier::new(&mut ctx.type_ctx);
+                let _ = unifier.unify(&lhs_ty, &rhs_ty);
+                Type::Prim(PrimType::Bool)
+            }
+
+            BinaryOp::And | BinaryOp::Or => {
+                let mut unifier = Unifier::new(&mut ctx.type_ctx);
+                let _ = unifier.unify(&lhs_ty, &Type::Prim(PrimType::Bool));
+                let _ = unifier.unify(&rhs_ty, &Type::Prim(PrimType::Bool));
+                Type::Prim(PrimType::Bool)
+            }
+        }
+    }
+
+    fn infer_unary(
+        &mut self,
+        op: &UnaryOp,
+        expr: &ExprNode,
+        span: Span,
+        ctx: &mut SemaCtxt,
+        diag: &mut DiagCtxt,
+    ) -> Type {
+        let inner_ty = self.infer_expr(&expr.expr, expr.span, ctx, diag);
+
+        match op {
+            UnaryOp::Neg => {
+                let resolved = ctx.type_ctx.resolve_type(&inner_ty);
+                if !resolved.is_numeric() && resolved != Type::Error {
+                    let err = diag
+                        .error(
+                            span,
+                            format!(
+                                "negation requires numeric type, got {}",
+                                resolved.display_name()
+                            ),
+                        )
+                        .build();
+                    diag.emit(err);
+                    Type::Error
+                } else {
+                    resolved
+                }
+            }
+            UnaryOp::Not => {
+                let mut unifier = Unifier::new(&mut ctx.type_ctx);
+                let _ = unifier.unify(&inner_ty, &Type::Prim(PrimType::Bool));
+                Type::Prim(PrimType::Bool)
+            }
+            UnaryOp::Deref => {
+                let resolved = ctx.type_ctx.resolve_type(&inner_ty);
+                match resolved {
+                    Type::Ptr(inner) => *inner,
+                    _ => {
+                        let err = diag
+                            .error(span, "dereference requires pointer type")
+                            .build();
+                        diag.emit(err);
+                        Type::Error
+                    }
+                }
+            }
+            UnaryOp::AddrOf => Type::Ptr(Box::new(inner_ty)),
+            UnaryOp::Inc | UnaryOp::Dec => inner_ty,
+        }
+    }
+
+    fn infer_call(
+        &mut self,
+        callee: &ExprNode,
+        args: &[ExprNode],
+        span: Span,
+        ctx: &mut SemaCtxt,
+        diag: &mut DiagCtxt,
+    ) -> Type {
+        let func_ty = self.infer_expr(&callee.expr, callee.span, ctx, diag);
+        let resolved = ctx.type_ctx.resolve_type(&func_ty);
+
+        let arg_types: Vec<Type> = args
+            .iter()
+            .map(|a| self.infer_expr(&a.expr, a.span, ctx, diag))
+            .collect();
+
+        match resolved {
+            Type::Func(param_types, ret_type) => {
+                if param_types.len() != arg_types.len() {
+                    let err = diag
+                        .error(
+                            span,
+                            format!(
+                                "expected {} arguments, got {}",
+                                param_types.len(),
+                                arg_types.len()
+                            ),
+                        )
+                        .build();
+                    diag.emit(err);
+                    return Type::Error;
+                }
+
+                let mut unifier = Unifier::new(&mut ctx.type_ctx);
+                for (p, a) in param_types.iter().zip(arg_types.iter()) {
+                    if let Err(UnifyError::Mismatch { expected, found }) =
+                        unifier.unify(p, a)
+                    {
+                        let err = diag
+                            .error(
+                                span,
+                                format!(
+                                    "argument type mismatch: expected {}, found {}",
+                                    expected.display_name(),
+                                    found.display_name()
+                                ),
+                            )
+                            .build();
+                        diag.emit(err);
+                        return Type::Error;
+                    }
+                }
+                *ret_type
+            }
+            Type::Class(_) => {
+                ctx.type_ctx.fresh_type_var()
+            }
+            _ => {
+                if func_ty != Type::Error {
+                    let err = diag
+                        .error(span, "called value is not a function")
+                        .build();
+                    diag.emit(err);
+                }
+                Type::Error
+            }
+        }
+    }
+
+    fn infer_field_access(
+        &mut self,
+        object: &ExprNode,
+        field: &str,
+        span: Span,
+        ctx: &mut SemaCtxt,
+        diag: &mut DiagCtxt,
+    ) -> Type {
+        let obj_ty = self.infer_expr(&object.expr, object.span, ctx, diag);
+        let resolved = ctx.type_ctx.resolve_type(&obj_ty);
+
+        match resolved {
+            Type::Class(name) => {
+                if let Some(sym) = ctx.symbol_table.resolve_global(&name) {
+                    let s = sym.borrow();
+                    match &s.kind {
+                        crate::frontend::sema_checker::symbol::SymbolKind::Class {
+                            fields,
+                        } => {
+                            if let Some(field_ty) = fields.get(field) {
+                                ast_type_to_tc(field_ty)
+                            } else {
+                                let err = diag
+                                    .error(
+                                        span,
+                                        format!(
+                                            "class `{}` has no field `{}`",
+                                            name, field
+                                        ),
+                                    )
+                                    .build();
+                                diag.emit(err);
+                                Type::Error
+                            }
+                        }
+                        _ => Type::Error,
+                    }
+                } else {
+                    Type::Error
+                }
+            }
+            _ => {
+                ctx.type_ctx.fresh_type_var()
+            }
+        }
+    }
+
+    fn infer_index(
+        &mut self,
+        object: &ExprNode,
+        index: &ExprNode,
+        span: Span,
+        ctx: &mut SemaCtxt,
+        diag: &mut DiagCtxt,
+    ) -> Type {
+        let obj_ty = self.infer_expr(&object.expr, object.span, ctx, diag);
+        let _idx_ty = self.infer_expr(&index.expr, index.span, ctx, diag);
+
+        let mut unifier = Unifier::new(&mut ctx.type_ctx);
+        let _ = unifier.unify(&_idx_ty, &Type::Prim(PrimType::Int));
+
+        let resolved = ctx.type_ctx.resolve_type(&obj_ty);
+        match resolved {
+            Type::List(elem_ty) => *elem_ty,
+            Type::Prim(PrimType::Str) => Type::Prim(PrimType::Char),
+            _ => {
+                let err = diag
+                    .error(span, "indexing requires array, list, or string")
+                    .build();
+                diag.emit(err);
+                Type::Error
+            }
+        }
+    }
+
+    fn infer_list_literal(
+        &mut self,
+        elements: &[ExprNode],
+        span: Span,
+        ctx: &mut SemaCtxt,
+        diag: &mut DiagCtxt,
+    ) -> Type {
+        if elements.is_empty() {
+            return Type::List(Box::new(ctx.type_ctx.fresh_type_var()));
+        }
+
+        let first_ty = self.infer_expr(&elements[0].expr, elements[0].span, ctx, diag);
+
+        for elem in &elements[1..] {
+            let elem_ty = self.infer_expr(&elem.expr, elem.span, ctx, diag);
+            let mut unifier = Unifier::new(&mut ctx.type_ctx);
+            if let Err(_) = unifier.unify(&first_ty, &elem_ty) {
+                let err = diag
+                    .error(
+                        span,
+                        format!(
+                            "list elements have mismatched types: {} and {}",
+                            first_ty.display_name(),
+                            elem_ty.display_name()
+                        ),
+                    )
+                    .build();
+                diag.emit(err);
+            }
+        }
+
+        Type::List(Box::new(first_ty))
+    }
+
+    fn infer_new(
+        &mut self,
+        cons: &str,
+        args: &[ExprNode],
+        span: Span,
+        ctx: &mut SemaCtxt,
+        diag: &mut DiagCtxt,
+    ) -> Type {
+        for arg in args {
+            self.infer_expr(&arg.expr, arg.span, ctx, diag);
+        }
+
+        if ctx.symbol_table.resolve_global(cons).is_none() {
+            Type::Error
+        } else {
+            Type::Class(cons.to_string())
+        }
+    }
+}
+
+pub fn ast_type_to_tc(ast_ty: &crate::frontend::ast::typ::Type) -> Type {
+    use crate::frontend::ast::typ::Type as AstType;
+    match ast_ty {
+        AstType::Int => Type::Prim(PrimType::Int),
+        AstType::Float => Type::Prim(PrimType::Float),
+        AstType::Bool => Type::Prim(PrimType::Bool),
+        AstType::Char => Type::Prim(PrimType::Char),
+        AstType::Str => Type::Prim(PrimType::Str),
+        AstType::Void => Type::Prim(PrimType::Void),
+        AstType::Ptr(inner) => Type::Ptr(Box::new(ast_type_to_tc(inner))),
+        AstType::List(inner) => Type::List(Box::new(ast_type_to_tc(inner))),
+        AstType::Class(name) => Type::Class(name.clone()),
+    }
 }
