@@ -567,17 +567,20 @@ impl<'a, 'diag> Parser<'a, 'diag> {
     }
 
     fn parse_var_def_stmt(&mut self) -> ParseResult<StmtNode> {
-        // 解析变量定义语句
         self.consume(
             TokenKind::Let,
             "Expected 'let' at the beginning of variable definition.",
         )?;
         let var_name = self.consume(TokenKind::Identifier, "Expected variable name.")?;
         let var_name = var_name.lexeme;
-        self.consume(TokenKind::Colon, "Expected ':' after variable name.")?;
-        let var_type = self.parse_type()?;
+        let var_type = if self.check(TokenKind::Colon) {
+            self.advance()?;
+            Some(self.parse_type()?)
+        } else {
+            None
+        };
         let var_init = if self.check(TokenKind::Equal) {
-            self.advance()?; // consume '='
+            self.advance()?;
             Some(self.parse_expr()?)
         } else {
             None
@@ -586,13 +589,14 @@ impl<'a, 'diag> Parser<'a, 'diag> {
             TokenKind::Semicolon,
             "Expected ';' after variable definition.",
         )?;
-        Ok(StmtNode { 
-                span: self.current_span(), 
-                stmt: Stmt::VarDef {
-                    name: var_name,
-                    ty: var_type,
-                    init: var_init,
-        } })
+        Ok(StmtNode {
+            span: self.current_span(),
+            stmt: Stmt::VarDef {
+                name: var_name,
+                ty: var_type,
+                init: var_init,
+            },
+        })
     }
 
     fn parse_block(&mut self) -> ParseResult<Block> {

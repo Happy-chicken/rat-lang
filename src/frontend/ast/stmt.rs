@@ -18,7 +18,7 @@ pub struct StmtNode {
 pub enum Stmt {
     VarDef {
         name: String,
-        ty: Type,
+        ty: Option<Type>,
         init: Option<ExprNode>,
     },
 
