@@ -123,6 +123,7 @@ impl<'a, 'diag> Parser<'a, 'diag> {
                 TokenKind::Continue,
                 TokenKind::TokenEOF,
             ]) {
+                let _ = self.advance();
                 return;
             }
             let _ = self.advance();
@@ -164,6 +165,8 @@ impl<'a, 'diag> Parser<'a, 'diag> {
                 TokenKind::While => self.parse_while_stmt(),
                 TokenKind::Return => self.parse_return_stmt(),
                 TokenKind::Let => self.parse_var_def_stmt(),
+                TokenKind::Break => self.parse_break_stmt(),
+                TokenKind::Continue => self.parse_continue_stmt(),
                 _ => {
                     let expr = self.parse_expr()?;
                     self.consume(TokenKind::Semicolon, "Expected ';' after expression.")?;
@@ -261,12 +264,18 @@ impl<'a, 'diag> Parser<'a, 'diag> {
     fn parse_comparison(&mut self) -> ParseResult<ExprNode> {
         // 解析比较表达式
         let mut expr = self.parse_term()?;
-        while self.check(TokenKind::Less) || self.check(TokenKind::Greater) {
-            let op = self.advance().unwrap(); // consume '<' or '>'
+        while self.check(TokenKind::Less)
+            || self.check(TokenKind::Greater)
+            || self.check(TokenKind::LessEqual)
+            || self.check(TokenKind::GreaterEqual)
+        {
+            let op = self.advance().unwrap(); // consume '<', '>', '<=', or '>='
             let right = self.parse_term()?;
             let kind = match op.kind {
                 TokenKind::Less => BinaryOp::Lt,
                 TokenKind::Greater => BinaryOp::Gt,
+                TokenKind::LessEqual => BinaryOp::Le,
+                TokenKind::GreaterEqual => BinaryOp::Ge,
                 _ => unreachable!(),
             };
             expr = ExprNode {
@@ -537,6 +546,24 @@ impl<'a, 'diag> Parser<'a, 'diag> {
         };
         self.consume(TokenKind::Semicolon, "Expected ';' after return statement.")?;
         Ok(StmtNode { span: return_token.span, stmt: Stmt::Return(expr) })
+    }
+
+    fn parse_break_stmt(&mut self) -> ParseResult<StmtNode> {
+        let token = self.consume(
+            TokenKind::Break,
+            "Expected 'break' at the beginning of break statement.",
+        )?;
+        self.consume(TokenKind::Semicolon, "Expected ';' after break statement.")?;
+        Ok(StmtNode { span: token.span, stmt: Stmt::Break })
+    }
+
+    fn parse_continue_stmt(&mut self) -> ParseResult<StmtNode> {
+        let token = self.consume(
+            TokenKind::Continue,
+            "Expected 'continue' at the beginning of continue statement.",
+        )?;
+        self.consume(TokenKind::Semicolon, "Expected ';' after continue statement.")?;
+        Ok(StmtNode { span: token.span, stmt: Stmt::Continue })
     }
 
     fn parse_var_def_stmt(&mut self) -> ParseResult<StmtNode> {

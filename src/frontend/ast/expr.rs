@@ -68,6 +68,8 @@ pub enum BinaryOp {
 
     Lt,
     Gt,
+    Le,
+    Ge,
 
     And,
     Or,
