@@ -1,5 +1,6 @@
 use crate::frontend::ast::printer::{AstPrint, branch, next_prefix};
 use crate::frontend::ast::stmt::Block;
+use crate::frontend::ast::expr::ExprNode;
 use crate::frontend::ast::typ::Type;
 use std::fmt::Write;
 use crate::common::span::Span;
@@ -17,6 +18,7 @@ pub enum Item {
     Class(Class),
     Trait(Trait),
     Impl(Impl),
+    VarDef(GlobalVar),
 }
 
 #[derive(Debug)]
@@ -63,6 +65,13 @@ pub struct Field {
     pub ty: Type,
 }
 
+#[derive(Debug)]
+pub struct GlobalVar {
+    pub name: String,
+    pub ty: Option<Type>,
+    pub init: Option<ExprNode>,
+}
+
 // ---- Item 系列 ----
 
 impl AstPrint for Item {
@@ -73,6 +82,7 @@ impl AstPrint for Item {
             Item::Class(c) => c.print(prefix, is_last, output),
             Item::Trait(t) => t.print(prefix, is_last, output),
             Item::Impl(i) => i.print(prefix, is_last, output),
+            Item::VarDef(v) => v.print(prefix, is_last, output),
         }
     }
 }
@@ -199,12 +209,26 @@ impl AstPrint for Impl {
 
         if !self.methods.is_empty() {
             writeln!(output, "{}└── Methods:", child)?;
-            let methods_prefix = format!("{}    ", child); // Methods: 下唯一分支的子项前缀
+            let methods_prefix = format!("{}    ", child);
             let count = self.methods.len();
             for (i, method) in self.methods.iter().enumerate() {
                 method.print(&methods_prefix, i == count - 1, output)?;
             }
         }
         Ok(())
+    }
+}
+
+impl AstPrint for GlobalVar {
+    fn print(&self, prefix: &str, is_last: bool, output: &mut impl Write) -> std::fmt::Result {
+        let branch_str = branch(is_last);
+        write!(output, "{}{}GlobalVar({}", prefix, branch_str, self.name)?;
+        if let Some(ref ty) = self.ty {
+            write!(output, ": {:?}", ty)?;
+        }
+        if self.init.is_some() {
+            write!(output, " = ...")?;
+        }
+        writeln!(output, ")")
     }
 }

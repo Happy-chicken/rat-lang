@@ -151,8 +151,7 @@ impl<'a, 'diag> Parser<'a, 'diag> {
             Some(TokenKind::Class) => Ok(ItemNode { span: self.current_span(), item: Item::Class(self.parse_class()?)}),
             Some(TokenKind::Trait) => Ok(ItemNode { span: self.current_span(), item: Item::Trait(self.parse_trait()?)}),
             Some(TokenKind::Impl) => Ok(ItemNode { span: self.current_span(), item: Item::Impl(self.parse_impl()?)}),
-            // TODO: global variable
-            // TokenKind::Let => self.parse_var_def_stmt(),
+            Some(TokenKind::Let) => Ok(ItemNode { span: self.current_span(), item: Item::VarDef(self.parse_global_var()?)}),
             _ => self.unexpected("Expected 'let', 'def', 'decl', 'class', 'trait', 'impl'."),
         }
     }
@@ -564,6 +563,36 @@ impl<'a, 'diag> Parser<'a, 'diag> {
         )?;
         self.consume(TokenKind::Semicolon, "Expected ';' after continue statement.")?;
         Ok(StmtNode { span: token.span, stmt: Stmt::Continue })
+    }
+
+    fn parse_global_var(&mut self) -> ParseResult<GlobalVar> {
+        self.consume(
+            TokenKind::Let,
+            "Expected 'let' at the beginning of global variable definition.",
+        )?;
+        let var_name = self.consume(TokenKind::Identifier, "Expected variable name.")?;
+        let var_name = var_name.lexeme;
+        let var_type = if self.check(TokenKind::Colon) {
+            self.advance()?;
+            Some(self.parse_type()?)
+        } else {
+            None
+        };
+        let var_init = if self.check(TokenKind::Equal) {
+            self.advance()?;
+            Some(self.parse_expr()?)
+        } else {
+            None
+        };
+        self.consume(
+            TokenKind::Semicolon,
+            "Expected ';' after global variable definition.",
+        )?;
+        Ok(GlobalVar {
+            name: var_name,
+            ty: var_type,
+            init: var_init,
+        })
     }
 
     fn parse_var_def_stmt(&mut self) -> ParseResult<StmtNode> {
