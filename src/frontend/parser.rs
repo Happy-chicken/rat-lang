@@ -166,6 +166,7 @@ impl<'a, 'diag> Parser<'a, 'diag> {
                 TokenKind::Let => self.parse_var_def_stmt(),
                 TokenKind::Break => self.parse_break_stmt(),
                 TokenKind::Continue => self.parse_continue_stmt(),
+                TokenKind::LeftBrace => self.parse_block_stmt(),
                 _ => {
                     let expr = self.parse_expr()?;
                     self.consume(TokenKind::Semicolon, "Expected ';' after expression.")?;
@@ -563,6 +564,11 @@ impl<'a, 'diag> Parser<'a, 'diag> {
         )?;
         self.consume(TokenKind::Semicolon, "Expected ';' after continue statement.")?;
         Ok(StmtNode { span: token.span, stmt: Stmt::Continue })
+    }
+
+    fn parse_block_stmt(&mut self) -> ParseResult<StmtNode> {
+        let block = self.parse_block()?;
+        Ok(StmtNode { span: self.current_span(), stmt: Stmt::BlockStmt(block) })
     }
 
     fn parse_global_var(&mut self) -> ParseResult<GlobalVar> {

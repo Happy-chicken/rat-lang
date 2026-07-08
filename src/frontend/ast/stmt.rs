@@ -37,6 +37,7 @@ pub enum Stmt {
     Return(Option<ExprNode>),
     Break,
     Continue,
+    BlockStmt(Block),
 }
 
 // ---- Block ----
@@ -138,6 +139,10 @@ impl AstPrint for Stmt {
             }
             Stmt::Continue => {
                 writeln!(output, "{}{}Continue", prefix, branch_str)?;
+            }
+            Stmt::BlockStmt(block) => {
+                writeln!(output, "{}{}BlockStmt", prefix, branch_str)?;
+                block.print(&next_prefix(prefix, is_last), true, output)?;
             }
         }
         Ok(())
