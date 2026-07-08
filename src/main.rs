@@ -1,18 +1,15 @@
 mod common;
 mod frontend;
-use frontend::ast::printer::AstPrint;
 use common::DiagCtxt;
 use common::location::SourceFile;
+use frontend::ast::printer::AstPrint;
 use frontend::lexer::Lexer;
 use frontend::parser::Parser;
-use frontend::sema_checker::{
-    symbol_table::SymbolTable,
-    sema_ctx::SemaCtxt,
-    AnalysisPipeline, 
-};
+use frontend::sema_checker::AnalysisPipeline;
 
 fn main() {
-    let src = r#"def main() { 
+    let src = r#"def main() {
+    let x:int;
     return x;
     }
     "#;
@@ -32,7 +29,7 @@ fn main() {
     // let mut sema_ctx = SemaCtxt::new();
     let mut analysis_pipeline = AnalysisPipeline::standard();
     let sema_ctx = analysis_pipeline.run(&ast, &mut diag_ctxt);
+    sema_ctx.symbol_table.dump();
     diag_ctxt.print_all(&mut std::io::stdout()).expect("");
     // print!("{:#?}", ast);
 }
-

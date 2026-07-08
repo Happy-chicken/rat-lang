@@ -1,20 +1,16 @@
-pub mod scope;
-pub mod symbol;
-pub mod symbol_table;
-pub mod resolver;
-pub mod pass;
-pub mod sema_ctx;
 pub mod checker;
 pub mod flow;
+pub mod pass;
+pub mod resolver;
+pub mod scope;
+pub mod sema_ctx;
+pub mod symbol;
+pub mod symbol_table;
 
-use crate::frontend::ast::Program;
 use crate::common::DiagCtxt;
+use crate::frontend::ast::Program;
 use crate::frontend::sema_checker::{
-    resolver::Resolver, 
-    checker::SemaChecker,
-    flow::FlowAnalyzer,
-    pass::Pass, 
-    sema_ctx::SemaCtxt
+    checker::SemaChecker, flow::FlowAnalyzer, pass::Pass, resolver::Resolver, sema_ctx::SemaCtxt,
 };
 use crate::frontend::type_checker::checker::TypeChecker;
 pub struct AnalysisPipeline {

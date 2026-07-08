@@ -1,7 +1,7 @@
 use std::rc::Rc;
 use std::cell::RefCell;
 use super::scope::{Scope, ScopeKind};
-use super::symbol::Symbol;
+use super::symbol::{Symbol, SymbolKind};
 
 pub struct SymbolTable {
     scopes: Vec<Scope>,
@@ -56,5 +56,39 @@ impl SymbolTable {
 
     pub fn depth(&self) -> usize {
         self.scopes.len()
+    }
+
+    pub fn dump(&self) {
+        println!("=== Symbol Table ===");
+        for (i, scope) in self.scopes.iter().enumerate() {
+            let kind_name = match scope.kind {
+                ScopeKind::Global => "Global",
+                ScopeKind::Function => "Function",
+                ScopeKind::Block => "Block",
+                ScopeKind::Loop => "Loop",
+            };
+            println!("Scope[{}] {}:", i, kind_name);
+            for (name, sym) in &scope.symbols {
+                let sym = sym.borrow();
+                let kind_str = match &sym.kind {
+                    SymbolKind::Variable { is_mutable, is_initialized } => {
+                        format!("variable (mut={}, init={})", is_mutable, is_initialized)
+                    }
+                    SymbolKind::Function { params, return_type } => {
+                        format!("function({}) -> {:?}", params.len(), return_type)
+                    }
+                    SymbolKind::Type => "type".to_string(),
+                    SymbolKind::Parameter { is_ref } => {
+                        format!("parameter (ref={})", is_ref)
+                    }
+                    SymbolKind::Class { fields } => {
+                        format!("class ({} fields)", fields.len())
+                    }
+                    SymbolKind::Trait => "trait".to_string(),
+                };
+                println!("  {} : {} @ depth={}", name, kind_str, sym.scope_depth);
+            }
+        }
+        println!("====================");
     }
 }
