@@ -661,22 +661,6 @@ impl<'a, 'diag> Parser<'a, 'diag> {
                         self.consume(TokenKind::Greater, "Expected '>' after list element type.")?;
                         Ok(Type::List(Box::new(element_type)))
                     }
-                    TokenKind::Array => {
-                        self.advance()?; // consume 'array'
-                        self.consume(TokenKind::Less, "Expected '<' after 'array'.")?;
-                        let size_token = self.consume(
-                            TokenKind::IntLiteral,
-                            "Expected array size as an integer literal.",
-                        )?;
-                        let size = size_token
-                            .lexeme
-                            .parse::<usize>()
-                            .expect("Array size must be a valid integer.");
-                        self.consume(TokenKind::Comma, "Expected ',' after array size.")?;
-                        let element_type = self.parse_type()?;
-                        self.consume(TokenKind::Greater, "Expected '>' after array element type.")?;
-                        Ok(Type::Array(size, Box::new(element_type)))
-                    }
                     _ => self.unexpected("Expected type name."),
                 }
             }

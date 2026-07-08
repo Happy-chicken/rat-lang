@@ -9,7 +9,6 @@ pub enum Type {
 
     Void,
     List(Box<Type>),
-    Array(usize, Box<Type>),
 
     Class(String),
 }

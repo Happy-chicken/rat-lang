@@ -43,7 +43,6 @@ static KEYWORDS: phf::Map<&'static str, TokenKind> = phf_map! {
     "str" => TokenKind::Str,
 
     "list" => TokenKind::List,
-    "array" => TokenKind::Array,
 
 
 };

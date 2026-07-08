@@ -84,8 +84,6 @@ pub enum TokenKind {
     Str,
     // list
     List,
-    // array
-    Array,
 
     TokenEOF,
     Error,
