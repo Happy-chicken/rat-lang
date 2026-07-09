@@ -4,6 +4,7 @@ use inkwell::context::Context;
 use inkwell::module::Module;
 use inkwell::types::{BasicType, BasicTypeEnum, StructType};
 use inkwell::values::{BasicValue, BasicValueEnum, IntValue, PointerValue};
+use inkwell::basic_block::BasicBlock;
 use inkwell::IntPredicate;
 
 use crate::common::DiagCtxt;
@@ -20,6 +21,7 @@ pub struct IrEmitter<'a, 'ctx> {
     builder: Builder<'ctx>,
     env: Env<'ctx>,
     diag: &'a mut DiagCtxt,
+    current_function: Option<inkwell::values::FunctionValue<'ctx>>,
 }
 
 impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
@@ -32,6 +34,7 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
             builder,
             env: Env::new(),
             diag,
+            current_function: None,
         }
     }
 
@@ -147,6 +150,7 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
         let function = self
             .module
             .add_function(&func.function_header.name, fn_type, None);
+        self.current_function = Some(function);
         let entry = self.context.append_basic_block(function, "entry");
         self.builder.position_at_end(entry);
 
@@ -270,10 +274,28 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
                 self.exit_scope();
             }
             Stmt::If { condition, then_branch, elif_branch, else_branch } => {
-                let d = self.diag.error(span, "if statement not implemented").build();
-                self.diag.emit(d);
+                self.compile_if(condition, then_branch, elif_branch, else_branch, span);
             }
             Stmt::Loop { condition, body } => {
+                self.compile_while(condition, body, span);
+            }
+            Stmt::Break => {
+                if let Some(info) = self.env.lookup_loop() {
+                    let _ = self.builder.build_unconditional_branch(info.exit_bb);
+                } else {
+                    let d = self.diag.error(span, "break outside of loop").build();
+                    self.diag.emit(d);
+                }
+            }
+            Stmt::Continue => {
+                if let Some(info) = self.env.lookup_loop() {
+                    let _ = self.builder.build_unconditional_branch(info.cond_bb);
+                } else {
+                    let d = self.diag.error(span, "continue outside of loop").build();
+                    self.diag.emit(d);
+                }
+            }
+            _ => {
                 let d = self
                     .diag
                     .error(span, "unsupported statement")
@@ -494,6 +516,137 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
             ).unwrap_or(array_alloca)
         };
         let _ = self.builder.build_store(data_ptr, first_elem);
+    }
+
+    fn compile_if(
+        &mut self,
+        condition: &ExprNode,
+        then_branch: &Block,
+        elif_branch: &[(ExprNode, Block)],
+        else_branch: &Block,
+        span: Span,
+    ) {
+        let cond_val = self.compile_expr(condition);
+        let cond_bool = self.to_bool(cond_val);
+
+        let parent = self.builder.get_insert_block()
+            .and_then(|bb| bb.get_parent())
+            .or(self.current_function);
+
+        let then_bb = self.context.append_basic_block(parent.unwrap(), "if.then");
+        let else_bb = self.context.append_basic_block(parent.unwrap(), "if.else");
+        let merge_bb = self.context.append_basic_block(parent.unwrap(), "if.merge");
+
+        let _ = self.builder.build_conditional_branch(cond_bool, then_bb, else_bb);
+
+        self.builder.position_at_end(then_bb);
+        self.enter_scope();
+        self.compile_block(then_branch);
+        self.exit_scope();
+        if self.builder.get_insert_block().unwrap().get_terminator().is_none() {
+            let _ = self.builder.build_unconditional_branch(merge_bb);
+        }
+
+        self.builder.position_at_end(else_bb);
+
+        if elif_branch.is_empty() && else_branch.stmts.is_empty() {
+            let _ = self.builder.build_unconditional_branch(merge_bb);
+        } else if !elif_branch.is_empty() {
+            self.compile_elif_chain(elif_branch, else_branch, merge_bb, span);
+        } else {
+            self.enter_scope();
+            self.compile_block(else_branch);
+            self.exit_scope();
+            if self.builder.get_insert_block().unwrap().get_terminator().is_none() {
+                let _ = self.builder.build_unconditional_branch(merge_bb);
+            }
+        }
+
+        self.builder.position_at_end(merge_bb);
+    }
+
+    fn compile_elif_chain(
+        &mut self,
+        elif_branch: &[(ExprNode, Block)],
+        else_branch: &Block,
+        merge_bb: BasicBlock<'ctx>,
+        span: Span,
+    ) {
+        for (i, (cond, block)) in elif_branch.iter().enumerate() {
+            let cond_val = self.compile_expr(cond);
+            let cond_bool = self.to_bool(cond_val);
+
+            let then_bb = self.context.append_basic_block(
+                self.builder.get_insert_block().unwrap().get_parent().unwrap(),
+                &format!("if.elif{}", i),
+            );
+            let next_bb = self.context.append_basic_block(
+                self.builder.get_insert_block().unwrap().get_parent().unwrap(),
+                &format!("if.elif{}.next", i),
+            );
+
+            let _ = self.builder.build_conditional_branch(cond_bool, then_bb, next_bb);
+
+            self.builder.position_at_end(then_bb);
+            self.enter_scope();
+            self.compile_block(block);
+            self.exit_scope();
+            if self.builder.get_insert_block().unwrap().get_terminator().is_none() {
+                let _ = self.builder.build_unconditional_branch(merge_bb);
+            }
+
+            self.builder.position_at_end(next_bb);
+        }
+
+        if !else_branch.stmts.is_empty() {
+            self.enter_scope();
+            self.compile_block(else_branch);
+            self.exit_scope();
+            if self.builder.get_insert_block().unwrap().get_terminator().is_none() {
+                let _ = self.builder.build_unconditional_branch(merge_bb);
+            }
+        } else {
+            let _ = self.builder.build_unconditional_branch(merge_bb);
+        }
+    }
+
+    fn compile_while(
+        &mut self,
+        condition: &ExprNode,
+        body: &Block,
+        span: Span,
+    ) {
+        let parent = self.builder.get_insert_block()
+            .and_then(|bb| bb.get_parent())
+            .or(self.current_function)
+            .unwrap();
+
+        let cond_bb = self.context.append_basic_block(parent, "while.cond");
+        let body_bb = self.context.append_basic_block(parent, "while.body");
+        let exit_bb = self.context.append_basic_block(parent, "while.exit");
+
+        let _ = self.builder.build_unconditional_branch(cond_bb);
+
+        self.builder.position_at_end(cond_bb);
+        let cond_val = self.compile_expr(condition);
+        let cond_bool = self.to_bool(cond_val);
+        let _ = self.builder.build_conditional_branch(cond_bool, body_bb, exit_bb);
+
+        self.builder.position_at_end(body_bb);
+        self.enter_scope();
+        self.env.set_loop(cond_bb, exit_bb);
+        self.compile_block(body);
+        self.exit_scope();
+
+        if self.builder.get_insert_block().unwrap().get_terminator().is_none() {
+            let _ = self.builder.build_unconditional_branch(cond_bb);
+        }
+
+        self.builder.position_at_end(exit_bb);
+    }
+
+    fn to_bool(&self, val: BasicValueEnum<'ctx>) -> IntValue<'ctx> {
+        val.into_int_value()
     }
 
     fn compile_index(
@@ -724,6 +877,7 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
         let lhs_int = lhs.into_int_value();
         let rhs_int = rhs.into_int_value();
         let zero = self.context.i64_type().const_zero();
+        let zero_i1 = self.context.bool_type().const_zero();
 
         let result: IntValue = match op {
             BinaryOp::Add => self.builder.build_int_add(lhs_int, rhs_int, "add").unwrap_or(zero),
@@ -732,6 +886,32 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
             BinaryOp::Div => {
                 self.builder.build_int_signed_div(lhs_int, rhs_int, "div").unwrap_or(zero)
             }
+            BinaryOp::Eq => {
+                self.builder.build_int_compare(IntPredicate::EQ, lhs_int, rhs_int, "eq")
+                    .unwrap_or(zero_i1)
+            }
+            BinaryOp::NotEq => {
+                self.builder.build_int_compare(IntPredicate::NE, lhs_int, rhs_int, "ne")
+                    .unwrap_or(zero_i1)
+            }
+            BinaryOp::Lt => {
+                self.builder.build_int_compare(IntPredicate::SLT, lhs_int, rhs_int, "lt")
+                    .unwrap_or(zero_i1)
+            }
+            BinaryOp::Gt => {
+                self.builder.build_int_compare(IntPredicate::SGT, lhs_int, rhs_int, "gt")
+                    .unwrap_or(zero_i1)
+            }
+            BinaryOp::Le => {
+                self.builder.build_int_compare(IntPredicate::SLE, lhs_int, rhs_int, "le")
+                    .unwrap_or(zero_i1)
+            }
+            BinaryOp::Ge => {
+                self.builder.build_int_compare(IntPredicate::SGE, lhs_int, rhs_int, "ge")
+                    .unwrap_or(zero_i1)
+            }
+            BinaryOp::And => self.builder.build_and(lhs_int, rhs_int, "and").unwrap_or(zero_i1),
+            BinaryOp::Or => self.builder.build_or(lhs_int, rhs_int, "or").unwrap_or(zero_i1),
             _ => {
                 let d = self
                     .diag

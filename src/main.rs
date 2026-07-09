@@ -14,13 +14,18 @@ use midend::ir_emitter::IrEmitter;
 
 fn main() {
     let src = r#"
-    def main()->int {
-        let x: int;
-        let xs:list<int>;
-        xs = [10, 20, 30];
-        xs[1] = 100 + (x = 5);
-        return xs[0] + xs[1];
+def main()->int {
+    let x: int = 2;
+    let xs:list<int>;
+    xs = [10, 20, 30];
+    xs[1] = 100;
+    let sum: int = 0;
+    while x >= 0 {
+        sum = sum + xs[x];
+        x = x - 1;
     }
+    return sum;
+}
     "#;
     let file = SourceFile::new("main.rat".to_string(), src.to_string());
     let mut diag_ctxt = DiagCtxt::new();
