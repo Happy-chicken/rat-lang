@@ -102,7 +102,7 @@ impl TypeInferer {
     ) -> Type {
         if let Some(sym) = ctx.symbol_table.resolve(name) {
             let s = sym.borrow();
-            match &s.kind {
+            return match &s.kind {
                 crate::frontend::sema_checker::symbol::SymbolKind::Variable { .. }
                 | crate::frontend::sema_checker::symbol::SymbolKind::Parameter { .. } => {
                     s.ty.clone().map_or(Type::Error, |ast_ty| ast_type_to_tc(&ast_ty))

@@ -2,8 +2,9 @@ use inkwell::AddressSpace;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::Module;
-use inkwell::types::BasicTypeEnum;
-use inkwell::values::{BasicValueEnum, IntValue};
+use inkwell::types::{BasicType, BasicTypeEnum, StructType};
+use inkwell::values::{BasicValue, BasicValueEnum, IntValue, PointerValue};
+use inkwell::IntPredicate;
 
 use crate::common::DiagCtxt;
 use crate::common::span::Span;
@@ -65,6 +66,12 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
     fn exit_scope(&mut self) {
         let old = std::mem::take(&mut self.env);
         self.env = old.pop();
+    }
+
+    fn get_list_struct_type(&self, _elem_ty: BasicTypeEnum<'ctx>) -> StructType<'ctx> {
+        let i64 = self.context.i64_type();
+        let ptr_ty = self.context.ptr_type(AddressSpace::default());
+        self.context.struct_type(&[i64.into(), i64.into(), ptr_ty.into()], false)
     }
 
     fn compile_global_var(&mut self, global: &GlobalVar, span: Span) {
@@ -131,10 +138,10 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
 
         let fn_type = match &ret_ast_ty {
             AstType::Void => self.context.void_type().fn_type(&param_meta, false),
-            AstType::Int => self.context.i64_type().fn_type(&param_meta, false),
-            AstType::Float => self.context.f32_type().fn_type(&param_meta, false),
-            AstType::Bool => self.context.bool_type().fn_type(&param_meta, false),
-            _ => self.context.i64_type().fn_type(&param_meta, false),
+            _ => {
+                let ret_llvm = self.ast_type_to_llvm(&ret_ast_ty);
+                ret_llvm.fn_type(&param_meta, false)
+            }
         };
 
         let function = self
@@ -162,7 +169,10 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
                             .diag
                             .error(
                                 span,
-                                format!("failed to allocate parameter '{}': {}", param.name, e),
+                                format!(
+                                    "failed to allocate parameter '{}': {}",
+                                    param.name, e
+                                ),
                             )
                             .build();
                         self.diag.emit(d);
@@ -177,19 +187,6 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
             match self.builder.get_insert_block() {
                 Some(last_bb) if last_bb.get_terminator().is_none() => {
                     let _ = self.builder.build_return(None);
-                }
-                None => {
-                    let d = self
-                        .diag
-                        .error(
-                            span,
-                            format!(
-                                "no insertion block in function '{}'",
-                                func.function_header.name
-                            ),
-                        )
-                        .build();
-                    self.diag.emit(d);
                 }
                 _ => {}
             }
@@ -210,13 +207,32 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
             Stmt::VarDef { name, ty, init } => {
                 let llvm_ty = match ty {
                     Some(t) => self.ast_type_to_llvm(t),
-                    None => self.context.i64_type().into(),
+                    None => {
+                        if let Some(init_expr) = init {
+                            match &init_expr.expr {
+                                Expr::List { .. } => self.context.i64_type().into(),
+                                _ => self.infer_lit_type(&init_expr.expr),
+                            }
+                        } else {
+                            self.context.i64_type().into()
+                        }
+                    }
                 };
                 match self.builder.build_alloca(llvm_ty, name) {
                     Ok(alloca) => {
                         if let Some(init_expr) = init {
-                            let value = self.compile_expr(init_expr);
-                            let _ = self.builder.build_store(alloca, value);
+                            match &init_expr.expr {
+                                Expr::Assign { target, value } => {
+                                    let _ = self.compile_assign(target, value, span);
+                                }
+                                Expr::List { elements } => {
+                                    self.emit_list_init(alloca, elements, span);
+                                }
+                                _ => {
+                                    let value = self.compile_expr(init_expr);
+                                    let _ = self.builder.build_store(alloca, value);
+                                }
+                            }
                         }
                         self.env.declare(
                             name.clone(),
@@ -253,10 +269,14 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
                 self.compile_block(block);
                 self.exit_scope();
             }
-            _ => {
+            Stmt::If { condition, then_branch, elif_branch, else_branch } => {
+                let d = self.diag.error(span, "if statement not implemented").build();
+                self.diag.emit(d);
+            }
+            Stmt::Loop { condition, body } => {
                 let d = self
                     .diag
-                    .error(span, format!("unsupported statement"))
+                    .error(span, "unsupported statement")
                     .build();
                 self.diag.emit(d);
             }
@@ -278,7 +298,7 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
                         Err(e) => {
                             let d = self
                                 .diag
-                                .error(span, format!("failed to load variable '{}': {}", name, e))
+                                .error(span, format!("failed to load '{}': {}", name, e))
                                 .build();
                             self.diag.emit(d);
                             zero
@@ -313,13 +333,7 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
                                 Err(e) => {
                                     let d = self
                                         .diag
-                                        .error(
-                                            span,
-                                            format!(
-                                                "failed to call function '{}': {}",
-                                                name, e
-                                            ),
-                                        )
+                                        .error(span, format!("call failed: {}", e))
                                         .build();
                                     self.diag.emit(d);
                                     zero
@@ -329,10 +343,7 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
                         None => {
                             let d = self
                                 .diag
-                                .error(
-                                    span,
-                                    format!("undefined function: {}", name),
-                                )
+                                .error(span, format!("undefined function: {}", name))
                                 .build();
                             self.diag.emit(d);
                             zero
@@ -341,20 +352,338 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
                 } else {
                     let d = self
                         .diag
-                        .error(span, "indirect function calls are not supported")
+                        .error(span, "indirect function calls not supported")
                         .build();
                     self.diag.emit(d);
                     zero
                 }
             }
+            Expr::Assign { target, value } => {
+                self.compile_assign(target, value, span)
+            }
+            Expr::List { elements } => {
+                self.emit_list_literal_expr(elements, span)
+            }
+            Expr::Index { object, index } => {
+                self.compile_index(object, index, span)
+            }
             _ => {
                 let d = self
                     .diag
-                    .error(span, format!("unsupported expression"))
+                    .error(span, "unsupported expression")
                     .build();
                 self.diag.emit(d);
                 zero
             }
+        }
+    }
+
+    fn emit_list_literal_expr(
+        &mut self,
+        elements: &[ExprNode],
+        span: Span,
+    ) -> BasicValueEnum<'ctx> {
+        let zero = self.context.i64_type().const_zero().into();
+
+        let elem_llvm_ty: BasicTypeEnum = if !elements.is_empty() {
+            self.infer_lit_type(&elements[0].expr)
+        } else {
+            self.context.i64_type().into()
+        };
+
+        let list_struct = self.get_list_struct_type(elem_llvm_ty);
+        let alloca = match self.builder.build_alloca(list_struct, "list.tmp") {
+            Ok(a) => a,
+            Err(e) => {
+                let d = self.diag.error(span, format!("alloca failed: {}", e)).build();
+                self.diag.emit(d);
+                return zero;
+            }
+        };
+
+        self.emit_list_init_fields(alloca, list_struct, elements, elem_llvm_ty, span);
+
+        match self.builder.build_load(list_struct, alloca, "list.load") {
+            Ok(v) => v.into(),
+            Err(e) => {
+                let d = self.diag.error(span, format!("load failed: {}", e)).build();
+                self.diag.emit(d);
+                zero
+            }
+        }
+    }
+
+    fn emit_list_init(
+        &mut self,
+        alloca: PointerValue<'ctx>,
+        elements: &[ExprNode],
+        span: Span,
+    ) {
+        let elem_llvm_ty: BasicTypeEnum = if !elements.is_empty() {
+            self.infer_lit_type(&elements[0].expr)
+        } else {
+            self.context.i64_type().into()
+        };
+
+        let list_struct = self.get_list_struct_type(elem_llvm_ty);
+        self.emit_list_init_fields(alloca, list_struct, elements, elem_llvm_ty, span);
+    }
+
+    fn emit_list_init_fields(
+        &mut self,
+        alloca: PointerValue<'ctx>,
+        list_struct: StructType<'ctx>,
+        elements: &[ExprNode],
+        elem_llvm_ty: BasicTypeEnum<'ctx>,
+        span: Span,
+    ) {
+        let elem_count = elements.len() as u64;
+        let i64_ty = self.context.i64_type();
+
+        let len_ptr = self.builder.build_struct_gep(list_struct, alloca, 0, "list.len")
+            .unwrap_or_else(|_| alloca);
+        let _ = self.builder.build_store(len_ptr, i64_ty.const_int(elem_count, false));
+
+        let cap_ptr = self.builder.build_struct_gep(list_struct, alloca, 1, "list.cap")
+            .unwrap_or_else(|_| alloca);
+        let _ = self.builder.build_store(cap_ptr, i64_ty.const_int(elem_count, false));
+
+        if elements.is_empty() {
+            let data_ptr = self.builder.build_struct_gep(list_struct, alloca, 2, "list.data")
+                .unwrap_or_else(|_| alloca);
+            let _ = self.builder.build_store(
+                data_ptr,
+                self.context.ptr_type(AddressSpace::default()).const_zero(),
+            );
+            return;
+        }
+
+        let array_ty = match elem_llvm_ty {
+            BasicTypeEnum::IntType(t) => t.array_type(elements.len() as u32),
+            BasicTypeEnum::FloatType(t) => t.array_type(elements.len() as u32),
+            _ => self.context.i64_type().array_type(elements.len() as u32),
+        };
+        let array_alloca = match self.builder.build_alloca(array_ty, "list.buf") {
+            Ok(a) => a,
+            Err(_) => return,
+        };
+
+        for (i, elem_expr) in elements.iter().enumerate() {
+            let elem_val = self.compile_expr(elem_expr);
+            let elem_ptr = unsafe {
+                self.builder.build_gep(
+                    array_ty,
+                    array_alloca,
+                    &[i64_ty.const_zero().into(), i64_ty.const_int(i as u64, false).into()],
+                    "list.elem",
+                ).unwrap_or(array_alloca)
+            };
+            let _ = self.builder.build_store(elem_ptr, elem_val);
+        }
+
+        let data_ptr = self.builder.build_struct_gep(list_struct, alloca, 2, "list.data")
+            .unwrap_or_else(|_| alloca);
+
+        let i64_ty = self.context.i64_type();
+        let first_elem = unsafe {
+            self.builder.build_gep(
+                array_ty,
+                array_alloca,
+                &[i64_ty.const_zero().into(), i64_ty.const_zero().into()],
+                "list.data.cast",
+            ).unwrap_or(array_alloca)
+        };
+        let _ = self.builder.build_store(data_ptr, first_elem);
+    }
+
+    fn compile_index(
+        &mut self,
+        object: &ExprNode,
+        index: &ExprNode,
+        span: Span,
+    ) -> BasicValueEnum<'ctx> {
+        let zero = self.context.i64_type().const_zero().into();
+
+        let obj_val = self.compile_expr(object);
+        let idx_val = self.compile_expr(index);
+
+        let obj_struct_val = obj_val.into_struct_value();
+
+        let list_struct = obj_struct_val.get_type();
+
+        let len_val = match self.builder.build_extract_value(obj_struct_val, 0, "list.len") {
+            Ok(v) => v.into_int_value(),
+            Err(_) => {
+                let d = self.diag.error(span, "failed to extract list len").build();
+                self.diag.emit(d);
+                return zero;
+            }
+        };
+        let data_val = match self.builder.build_extract_value(obj_struct_val, 2, "list.data") {
+            Ok(v) => v.into_pointer_value(),
+            Err(_) => {
+                let d = self.diag.error(span, "failed to extract list data").build();
+                self.diag.emit(d);
+                return zero;
+            }
+        };
+
+        let idx_int = idx_val.into_int_value();
+
+        self.emit_bounds_check(idx_int, len_val, span);
+
+        let elem_llvm_ty: BasicTypeEnum = self.context.i64_type().into();
+
+        let elem_ptr = unsafe {
+            self.builder.build_gep(
+                elem_llvm_ty,
+                data_val,
+                &[idx_int.into()],
+                "list.idx",
+            ).unwrap_or(data_val)
+        };
+
+        match self.builder.build_load(elem_llvm_ty, elem_ptr, "list.elem.load") {
+            Ok(v) => v,
+            Err(e) => {
+                let d = self.diag.error(span, format!("load element failed: {}", e)).build();
+                self.diag.emit(d);
+                zero
+            }
+        }
+    }
+
+    fn emit_bounds_check(
+        &mut self,
+        index: IntValue<'ctx>,
+        len: IntValue<'ctx>,
+        _span: Span,
+    ) {
+        let zero = self.context.i64_type().const_zero();
+
+        let is_negative = match self.builder.build_int_compare(
+            inkwell::IntPredicate::SLT,
+            index,
+            zero,
+            "bounds.low",
+        ) {
+            Ok(v) => v,
+            Err(_) => return,
+        };
+        let is_oob = match self.builder.build_int_compare(
+            inkwell::IntPredicate::SGE,
+            index,
+            len,
+            "bounds.high",
+        ) {
+            Ok(v) => v,
+            Err(_) => return,
+        };
+        let is_bad = match self.builder.build_or(is_negative, is_oob, "bounds.bad") {
+            Ok(v) => v,
+            Err(_) => return,
+        };
+
+        let trap_bb = self.context.append_basic_block(
+            self.builder.get_insert_block().unwrap().get_parent().unwrap(),
+            "bounds.trap",
+        );
+        let ok_bb = self.context.append_basic_block(
+            self.builder.get_insert_block().unwrap().get_parent().unwrap(),
+            "bounds.ok",
+        );
+
+        let _ = self.builder.build_conditional_branch(is_bad, trap_bb, ok_bb);
+
+        self.builder.position_at_end(trap_bb);
+        let _ = self.builder.build_return(None);
+
+        self.builder.position_at_end(ok_bb);
+    }
+
+    // --- assignment ---
+
+    fn compile_assign(
+        &mut self,
+        target: &ExprNode,
+        value: &ExprNode,
+        span: Span,
+    ) -> BasicValueEnum<'ctx> {
+        let zero = self.context.i64_type().const_zero().into();
+
+        match &target.expr {
+            Expr::Variable(name) => {
+                if let Some(info) = self.env.lookup(name) {
+                    match &value.expr {
+                        Expr::List { elements } => {
+                            self.emit_list_init(info.ptr, elements, span);
+                            zero
+                        }
+                        _ => {
+                            let val = self.compile_expr(value);
+                            let _ = self.builder.build_store(info.ptr, val);
+                            val
+                        }
+                    }
+                } else {
+                    let d = self
+                        .diag
+                        .error(span, format!("cannot find `{}` for assignment", name))
+                        .build();
+                    self.diag.emit(d);
+                    zero
+                }
+            }
+
+            Expr::Index { .. } => {
+                let ptr = self.compile_index_ptr(target, span);
+                let val = self.compile_expr(value);
+                let _ = self.builder.build_store(ptr, val);
+                val
+            }
+
+            _ => {
+                let d = self.diag.error(span, "unsupported assignment target").build();
+                self.diag.emit(d);
+                zero
+            }
+        }
+    }
+
+    fn compile_index_ptr(
+        &mut self,
+        expr_node: &ExprNode,
+        span: Span,
+    ) -> PointerValue<'ctx> {
+        if let Expr::Index { object, index } = &expr_node.expr {
+            let obj_val = self.compile_expr(object);
+            let idx_val = self.compile_expr(index);
+
+            let obj_struct_val = obj_val.into_struct_value();
+
+            let len_val = match self.builder.build_extract_value(obj_struct_val, 0, "list.len") {
+                Ok(v) => v.into_int_value(),
+                Err(_) => return self.context.ptr_type(AddressSpace::default()).const_null(),
+            };
+            let data_val = match self.builder.build_extract_value(obj_struct_val, 2, "list.data") {
+                Ok(v) => v.into_pointer_value(),
+                Err(_) => return self.context.ptr_type(AddressSpace::default()).const_null(),
+            };
+
+            let idx_int = idx_val.into_int_value();
+            self.emit_bounds_check(idx_int, len_val, span);
+
+            let elem_llvm_ty: BasicTypeEnum = self.context.i64_type().into();
+            unsafe {
+                self.builder.build_gep(
+                    elem_llvm_ty,
+                    data_val,
+                    &[idx_int.into()],
+                    "list.assign.ptr",
+                ).unwrap_or(data_val)
+            }
+        } else {
+            self.context.ptr_type(AddressSpace::default()).const_null()
         }
     }
 
@@ -397,50 +726,12 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
         let zero = self.context.i64_type().const_zero();
 
         let result: IntValue = match op {
-            BinaryOp::Add => match self.builder.build_int_add(lhs_int, rhs_int, "add") {
-                Ok(v) => v,
-                Err(e) => {
-                    let d = self
-                        .diag
-                        .error(span, format!("failed to build add: {}", e))
-                        .build();
-                    self.diag.emit(d);
-                    zero
-                }
-            },
-            BinaryOp::Sub => match self.builder.build_int_sub(lhs_int, rhs_int, "sub") {
-                Ok(v) => v,
-                Err(e) => {
-                    let d = self
-                        .diag
-                        .error(span, format!("failed to build sub: {}", e))
-                        .build();
-                    self.diag.emit(d);
-                    zero
-                }
-            },
-            BinaryOp::Mul => match self.builder.build_int_mul(lhs_int, rhs_int, "mul") {
-                Ok(v) => v,
-                Err(e) => {
-                    let d = self
-                        .diag
-                        .error(span, format!("failed to build mul: {}", e))
-                        .build();
-                    self.diag.emit(d);
-                    zero
-                }
-            },
-            BinaryOp::Div => match self.builder.build_int_signed_div(lhs_int, rhs_int, "div") {
-                Ok(v) => v,
-                Err(e) => {
-                    let d = self
-                        .diag
-                        .error(span, format!("failed to build div: {}", e))
-                        .build();
-                    self.diag.emit(d);
-                    zero
-                }
-            },
+            BinaryOp::Add => self.builder.build_int_add(lhs_int, rhs_int, "add").unwrap_or(zero),
+            BinaryOp::Sub => self.builder.build_int_sub(lhs_int, rhs_int, "sub").unwrap_or(zero),
+            BinaryOp::Mul => self.builder.build_int_mul(lhs_int, rhs_int, "mul").unwrap_or(zero),
+            BinaryOp::Div => {
+                self.builder.build_int_signed_div(lhs_int, rhs_int, "div").unwrap_or(zero)
+            }
             _ => {
                 let d = self
                     .diag
@@ -458,6 +749,15 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
             AstType::Int => self.context.i64_type().into(),
             AstType::Float => self.context.f32_type().into(),
             AstType::Bool => self.context.bool_type().into(),
+            AstType::Char => self.context.i8_type().into(),
+            AstType::Void => self.context.i64_type().into(),
+            AstType::Ptr(_inner) => {
+                self.context.ptr_type(AddressSpace::default()).into()
+            }
+            AstType::List(inner) => {
+                let elem = self.ast_type_to_llvm(inner);
+                self.get_list_struct_type(elem).into()
+            }
             _ => self.context.i64_type().into(),
         }
     }

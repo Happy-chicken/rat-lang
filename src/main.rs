@@ -14,13 +14,12 @@ use midend::ir_emitter::IrEmitter;
 
 fn main() {
     let src = r#"
-    def add(a:int, b:int)->int {
-        return a + b;
-    }
     def main()->int {
-        let x:int = 10;
-        let y:int = 20;
-        return add(x, y);
+        let x: int;
+        let xs:list<int>;
+        xs = [10, 20, 30];
+        xs[1] = 100 + (x = 5);
+        return xs[0] + xs[1];
     }
     "#;
     let file = SourceFile::new("main.rat".to_string(), src.to_string());
@@ -32,13 +31,13 @@ fn main() {
     let mut parser = Parser::new(lexer, &mut diag_ctxt);
     let ast = parser.parse_program();
 
-    let mut output = String::new();
-    ast.print("", true, &mut output).unwrap();
-    println!("{}", output);
+    // let mut output = String::new();
+    // ast.print("", true, &mut output).unwrap();
+    // println!("{}", output);
 
     let mut analysis_pipeline = AnalysisPipeline::standard();
     let sema_ctx = analysis_pipeline.run(&ast, &mut diag_ctxt);
-    sema_ctx.symbol_table.dump();
+    // sema_ctx.symbol_table.dump();
     diag_ctxt.print_all(&mut std::io::stdout()).expect("");
 
     println!("\n=== LLVM IR ===");

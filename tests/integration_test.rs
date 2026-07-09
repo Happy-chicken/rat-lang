@@ -1,12 +1,15 @@
 use std::fs;
 use std::path::Path;
+use inkwell::context::Context;
+use ratlang::backend::jit::JitRunner;
 use ratlang::common::DiagCtxt;
 use ratlang::common::location::SourceFile;
 use ratlang::frontend::lexer::Lexer;
 use ratlang::frontend::parser::Parser;
-use ratlang::frontend::sema_checker::AnalysisPipeline;
+use ratlang::frontend::sema_checker::{AnalysisPipeline, sema_ctx::SemaCtxt};
+use ratlang::midend::ir_emitter::IrEmitter;
 
-fn run_pipeline(src: &str) -> DiagCtxt {
+fn run_pipeline(src: &str) -> (DiagCtxt, SemaCtxt) {
     let file = SourceFile::new("test.rat".into(), src.to_string());
     let mut diag = DiagCtxt::new();
     diag.add_file(file.clone());
@@ -16,8 +19,8 @@ fn run_pipeline(src: &str) -> DiagCtxt {
     let ast = parser.parse_program();
 
     let mut pipeline = AnalysisPipeline::standard();
-    let _ = pipeline.run(&ast, &mut diag);
-    diag
+    let sema_ctx = pipeline.run(&ast, &mut diag);
+    (diag, sema_ctx)
 }
 
 fn diag_output(diag: &DiagCtxt) -> String {
@@ -26,28 +29,46 @@ fn diag_output(diag: &DiagCtxt) -> String {
     String::from_utf8_lossy(&buf).to_string()
 }
 
+struct CaseDirectives {
+    should_pass: bool,
+    should_fail: bool,
+    expected_errors: Vec<String>,
+    expected_warnings: Vec<String>,
+    jit_expect: Option<i64>,
+}
+
+fn parse_directives(src: &str) -> CaseDirectives {
+    CaseDirectives {
+        should_pass: src.contains("// @pass"),
+        should_fail: src.contains("// @fail"),
+        expected_errors: src
+            .lines()
+            .filter(|l| l.starts_with("// @error:"))
+            .map(|l| l.trim_start_matches("// @error:").trim().to_string())
+            .collect(),
+        expected_warnings: src
+            .lines()
+            .filter(|l| l.starts_with("// @warning:"))
+            .map(|l| l.trim_start_matches("// @warning:").trim().to_string())
+            .collect(),
+        jit_expect: src
+            .lines()
+            .filter(|l| l.starts_with("// @jit:"))
+            .filter_map(|l| l.trim_start_matches("// @jit:").trim().parse::<i64>().ok())
+            .next(),
+    }
+}
+
 fn run_cat_case(path: &Path, display_name: &str) {
     let src = fs::read_to_string(path)
         .unwrap_or_else(|e| panic!("failed to read {}: {}", path.display(), e));
 
-    let should_pass = src.contains("// @pass");
-    let should_fail = src.contains("// @fail");
-
-    let expected_errors: Vec<&str> = src
-        .lines()
-        .filter(|l| l.starts_with("// @error:"))
-        .map(|l| l.trim_start_matches("// @error:").trim())
-        .collect();
-    let expected_warnings: Vec<&str> = src
-        .lines()
-        .filter(|l| l.starts_with("// @warning:"))
-        .map(|l| l.trim_start_matches("// @warning:").trim())
-        .collect();
-
-    let diag = run_pipeline(&src);
+    let directives = parse_directives(&src);
+    let (diag, sema_ctx) = run_pipeline(&src);
     let output = diag_output(&diag);
 
-    if should_pass {
+    // check pass/fail
+    if directives.should_pass {
         assert!(
             !diag.has_errors(),
             "{}: expected no errors but got:\n{}",
@@ -55,8 +76,7 @@ fn run_cat_case(path: &Path, display_name: &str) {
             output
         );
     }
-
-    if should_fail {
+    if directives.should_fail {
         assert!(
             diag.has_errors(),
             "{}: expected errors but got none",
@@ -64,24 +84,62 @@ fn run_cat_case(path: &Path, display_name: &str) {
         );
     }
 
-    for msg in &expected_errors {
+    // check specific error/warning messages
+    for msg in &directives.expected_errors {
         assert!(
-            output.contains(msg),
+            output.contains(msg.as_str()),
             "{}: expected error containing '{}', but output was:\n{}",
-            display_name,
-            msg,
-            output
+            display_name, msg, output
+        );
+    }
+    for msg in &directives.expected_warnings {
+        assert!(
+            output.contains(msg.as_str()),
+            "{}: expected warning containing '{}', but output was:\n{}",
+            display_name, msg, output
         );
     }
 
-    for msg in &expected_warnings {
+    // JIT
+    if let Some(expected) = directives.jit_expect {
         assert!(
-            output.contains(msg),
-            "{}: expected warning containing '{}', but output was:\n{}",
-            display_name,
-            msg,
-            output
+            !diag.has_errors(),
+            "{}: @jit expected but pipeline has errors:\n{}",
+            display_name, output
         );
+
+        let jit_src = src.clone();
+        let file = SourceFile::new("test.rat".into(), jit_src);
+        let lexer_src = file.src.clone();
+        let lexer = Lexer::new(&lexer_src);
+        let mut fresh_diag = DiagCtxt::new();
+        fresh_diag.add_file(file);
+        let mut parser = Parser::new(lexer, &mut fresh_diag);
+        let ast = parser.parse_program();
+
+        let context = Context::create();
+        let mut emitter = IrEmitter::new(&context, "test", &mut fresh_diag);
+        emitter.generate(&ast, &sema_ctx);
+
+        match JitRunner::new(emitter.module()) {
+            Ok(runner) => unsafe {
+                match runner.call_main() {
+                    Ok(result) => {
+                        assert_eq!(
+                            result, expected,
+                            "{}: JIT returned {}, expected {}",
+                            display_name, result, expected
+                        );
+                    }
+                    Err(e) => {
+                        panic!("{}: JIT call failed: {}", display_name, e);
+                    }
+                }
+            },
+            Err(e) => {
+                panic!("{}: JIT init failed: {}", display_name, e);
+            }
+        }
     }
 }
 

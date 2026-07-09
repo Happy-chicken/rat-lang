@@ -26,9 +26,12 @@ impl<'a> Unifier<'a> {
 
             (Type::Prim(pa), Type::Prim(pb)) if pa == pb => Ok(a),
 
-            (Type::List(ia), Type::List(ib))
-            | (Type::Ptr(ia), Type::Ptr(ib)) => {
-                self.unify(ia, ib)
+            (Type::List(ia), Type::List(ib)) => {
+                self.unify(ia, ib).map(|inner| Type::List(Box::new(inner)))
+            }
+
+            (Type::Ptr(ia), Type::Ptr(ib)) => {
+                self.unify(ia, ib).map(|inner| Type::Ptr(Box::new(inner)))
             }
 
             (Type::Func(pa, ra), Type::Func(pb, rb)) if pa.len() == pb.len() => {
