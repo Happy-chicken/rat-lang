@@ -1,6 +1,7 @@
 use crate::frontend::ast::expr::*;
 use crate::common::{DiagCtxt, span::Span};
 use crate::frontend::sema_checker::sema_ctx::SemaCtxt;
+use crate::frontend::sema_checker::symbol::SymbolKind;
 use crate::frontend::type_checker::typ::{Type, PrimType};
 use crate::frontend::type_checker::unifier::Unifier;
 use crate::common::error::UnifyError;
@@ -31,7 +32,6 @@ impl TypeInferer {
             Expr::List { elements } => {
                 self.infer_list_literal(elements, span, ctx, diag)
             }
-            Expr::New { cons, args } => self.infer_new(cons, args, span, ctx, diag),
         }
     }
 
@@ -325,8 +325,21 @@ impl TypeInferer {
                 }
                 *ret_type
             }
-            Type::Class(_) => {
-                ctx.type_ctx.fresh_type_var()
+            Type::Class(name) => {
+                if let Some(sym) = ctx.symbol_table.resolve_global(&name) {
+                    let s = sym.borrow();
+                    if let SymbolKind::Class { fields } = &s.kind {
+                        if args.len() > fields.len() {
+                            let err = diag.error(span, format!(
+                                "class `{}` has {} fields but got {} arguments",
+                                name, fields.len(), args.len()
+                            )).build();
+                            diag.emit(err);
+                            return Type::Error;
+                        }
+                    }
+                }
+                Type::Class(name)
             }
             _ => {
                 if func_ty != Type::Error {
@@ -447,25 +460,6 @@ impl TypeInferer {
         }
 
         Type::List(Box::new(first_ty))
-    }
-
-    fn infer_new(
-        &mut self,
-        cons: &str,
-        args: &[ExprNode],
-        span: Span,
-        ctx: &mut SemaCtxt,
-        diag: &mut DiagCtxt,
-    ) -> Type {
-        for arg in args {
-            self.infer_expr(&arg.expr, arg.span, ctx, diag);
-        }
-
-        if ctx.symbol_table.resolve_global(cons).is_none() {
-            Type::Error
-        } else {
-            Type::Class(cons.to_string())
-        }
     }
 }
 

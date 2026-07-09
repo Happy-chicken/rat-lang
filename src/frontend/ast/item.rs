@@ -59,10 +59,11 @@ pub struct Impl {
     pub methods: Vec<FunctionDef>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Field {
     pub name: String,
     pub ty: Type,
+    pub init: Option<ExprNode>,
 }
 
 #[derive(Debug)]

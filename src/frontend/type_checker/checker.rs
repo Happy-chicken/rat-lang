@@ -34,6 +34,7 @@ impl Pass for TypeChecker {
                     }
                 }
                 Item::VarDef(global) => self.check_global_var(global, ctx, diag),
+                Item::Class(class) => self.check_class_defaults(class, ctx, diag),
                 _ => {}
             }
         }
@@ -307,6 +308,37 @@ impl TypeChecker {
             }
         } else if matches!(&resolved, Type::List(_)) {
             ctx.type_ctx.record_list_length(id, 0);
+        }
+    }
+
+    fn check_class_defaults(
+        &mut self,
+        class: &Class,
+        ctx: &mut SemaCtxt,
+        diag: &mut DiagCtxt,
+    ) {
+        for field in &class.fields {
+            if let Some(ref default_expr) = field.init {
+                let field_ty = crate::frontend::type_checker::inferer::ast_type_to_tc(&field.ty);
+                let inferred = self.inferer.infer_expr(
+                    &default_expr.expr, default_expr.span, ctx, diag,
+                );
+                let mut unifier = Unifier::new(&mut ctx.type_ctx);
+                if let Err(UnifyError::Mismatch { expected, found }) =
+                    unifier.unify(&inferred, &field_ty)
+                {
+                    let err = diag.error(
+                        default_expr.span,
+                        format!(
+                            "field `{}` default type mismatch: expected {}, found {}",
+                            field.name,
+                            expected.display_name(),
+                            found.display_name(),
+                        ),
+                    ).build();
+                    diag.emit(err);
+                }
+            }
         }
     }
 }

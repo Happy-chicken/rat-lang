@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use inkwell::AddressSpace;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
@@ -13,7 +14,7 @@ use crate::frontend::ast::Program;
 use crate::frontend::ast::{expr::*, item::*, stmt::*, typ::Type as AstType};
 use crate::frontend::sema_checker::sema_ctx::SemaCtxt;
 
-use super::env::{Env, VarInfo};
+use super::env::{Env, VarInfo, ClassInfo};
 
 pub struct IrEmitter<'a, 'ctx> {
     context: &'ctx Context,
@@ -22,6 +23,7 @@ pub struct IrEmitter<'a, 'ctx> {
     env: Env<'ctx>,
     diag: &'a mut DiagCtxt,
     current_function: Option<inkwell::values::FunctionValue<'ctx>>,
+    class_info: HashMap<String, ClassInfo<'ctx>>,
 }
 
 impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
@@ -35,10 +37,12 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
             env: Env::new(),
             diag,
             current_function: None,
+            class_info: HashMap::new(),
         }
     }
 
-    pub fn generate(&mut self, program: &Program, _sema_ctx: &SemaCtxt) {
+    pub fn generate(&mut self, program: &Program, sema_ctx: &SemaCtxt) {
+        self.build_class_types(program, sema_ctx);
         for item_node in &program.items {
             let span = item_node.span;
             match &item_node.item {
@@ -69,6 +73,37 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
     fn exit_scope(&mut self) {
         let old = std::mem::take(&mut self.env);
         self.env = old.pop();
+    }
+
+    fn build_class_types(&mut self, program: &Program, _sema_ctx: &SemaCtxt) {
+        for item_node in &program.items {
+            if let Item::Class(class) = &item_node.item {
+                let mut field_tys: Vec<BasicTypeEnum<'ctx>> = Vec::new();
+                let mut field_indices: HashMap<String, u32> = HashMap::new();
+                let mut field_defaults: Vec<Option<ExprNode>> = Vec::new();
+                for (i, field) in class.fields.iter().enumerate() {
+                    field_tys.push(self.ast_type_to_llvm(&field.ty));
+                    field_indices.insert(field.name.clone(), i as u32);
+                    field_defaults.push(field.init.clone());
+                }
+                let field_refs: Vec<_> = field_tys.iter().map(|t| (*t).into()).collect();
+                let named = self.context.opaque_struct_type(&class.name);
+                named.set_body(&field_refs, false);
+                self.class_info.insert(class.name.clone(), ClassInfo {
+                    struct_ty: named,
+                    field_indices,
+                    field_defaults,
+                });
+            }
+        }
+    }
+
+    fn get_class_info(&self, name: &str) -> Option<&ClassInfo<'ctx>> {
+        self.class_info.get(name)
+    }
+
+    fn get_class_struct_ty(&self, name: &str) -> Option<StructType<'ctx>> {
+        self.class_info.get(name).map(|c| c.struct_ty)
     }
 
     fn get_list_struct_type(&self, _elem_ty: BasicTypeEnum<'ctx>) -> StructType<'ctx> {
@@ -237,6 +272,22 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
                                     let _ = self.builder.build_store(alloca, value);
                                 }
                             }
+                        } else if let Some(AstType::Class(class_name)) = ty {
+                            if let Some(info) = self.class_info.get(class_name) {
+                                let defaults = info.field_defaults.clone();
+                                if let Some(class_st) = self.get_class_struct_ty(class_name) {
+                                    for (i, default) in defaults.iter().enumerate() {
+                                        let val = if let Some(default_expr) = default {
+                                            self.compile_expr(default_expr)
+                                        } else {
+                                            self.context.i64_type().const_zero().into()
+                                        };
+                                        let field_ptr = self.builder.build_struct_gep(class_st, alloca, i as u32, "init.field")
+                                            .unwrap_or(alloca);
+                                        let _ = self.builder.build_store(field_ptr, val);
+                                    }
+                                }
+                            }
                         }
                         self.env.declare(
                             name.clone(),
@@ -294,13 +345,6 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
                     let d = self.diag.error(span, "continue outside of loop").build();
                     self.diag.emit(d);
                 }
-            }
-            _ => {
-                let d = self
-                    .diag
-                    .error(span, "unsupported statement")
-                    .build();
-                self.diag.emit(d);
             }
         }
     }
@@ -363,6 +407,35 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
                             }
                         }
                         None => {
+                            if let Some(info) = self.class_info.get(name) {
+                                let class_st = info.struct_ty;
+                                let defaults = info.field_defaults.clone();
+                                let alloca = match self.builder.build_alloca(class_st, &format!("ctor.{}", name)) {
+                                    Ok(a) => a,
+                                    Err(_) => return zero,
+                                };
+                                let total_fields = defaults.len();
+
+                                for i in 0..total_fields {
+                                    let val = if i < args.len() {
+                                        self.compile_expr(&args[i])
+                                    } else {
+                                        let default_val = defaults.get(i).and_then(|o| o.as_ref());
+                                        if let Some(default_expr) = default_val {
+                                            self.compile_expr(default_expr)
+                                        } else {
+                                            self.context.i64_type().const_zero().into()
+                                        }
+                                    };
+                                    let field_ptr = self.builder.build_struct_gep(class_st, alloca, i as u32, "ctor.field")
+                                        .unwrap_or(alloca);
+                                    let _ = self.builder.build_store(field_ptr, val);
+                                }
+                                match self.builder.build_load(class_st, alloca, "ctor.load") {
+                                    Ok(v) => return v.into(),
+                                    Err(_) => return zero,
+                                }
+                            }
                             let d = self
                                 .diag
                                 .error(span, format!("undefined function: {}", name))
@@ -382,6 +455,9 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
             }
             Expr::Assign { target, value } => {
                 self.compile_assign(target, value, span)
+            }
+            Expr::Member { object, field } => {
+                self.compile_member_access(object, field, span)
             }
             Expr::List { elements } => {
                 self.emit_list_literal_expr(elements, span)
@@ -795,6 +871,13 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
                 val
             }
 
+            Expr::Member { .. } => {
+                let ptr = self.compile_member_ptr(target, span);
+                let val = self.compile_expr(value);
+                let _ = self.builder.build_store(ptr, val);
+                val
+            }
+
             _ => {
                 let d = self.diag.error(span, "unsupported assignment target").build();
                 self.diag.emit(d);
@@ -838,6 +921,89 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
         } else {
             self.context.ptr_type(AddressSpace::default()).const_null()
         }
+    }
+
+    // --- class: field access ---
+
+    fn compile_member_access(
+        &mut self,
+        object: &ExprNode,
+        field: &str,
+        span: Span,
+    ) -> BasicValueEnum<'ctx> {
+        let zero = self.context.i64_type().const_zero().into();
+
+        if let Some((class_name, field_idx)) = self.resolve_member_field(field) {
+            if let Some(class_st) = self.get_class_struct_ty(&class_name) {
+                let obj_ptr = self.get_object_ptr(object, span);
+                let field_ptr = self.builder.build_struct_gep(class_st, obj_ptr, field_idx, "member.field")
+                    .unwrap_or(obj_ptr);
+                let field_ty: BasicTypeEnum = self.context.i64_type().into();
+                return match self.builder.build_load(field_ty, field_ptr, &format!("load.{}", field)) {
+                    Ok(v) => v,
+                    Err(_) => zero,
+                };
+            }
+        }
+        zero
+    }
+
+    fn compile_member_ptr(
+        &mut self,
+        expr_node: &ExprNode,
+        span: Span,
+    ) -> PointerValue<'ctx> {
+        if let Expr::Member { object, field } = &expr_node.expr {
+            if let Some((class_name, field_idx)) = self.resolve_member_field(field) {
+                if let Some(class_st) = self.get_class_struct_ty(&class_name) {
+                    let obj_ptr = self.get_object_ptr(object, span);
+                    return self.builder.build_struct_gep(class_st, obj_ptr, field_idx, "member.ptr")
+                        .unwrap_or(obj_ptr);
+                }
+            }
+        }
+        self.context.ptr_type(AddressSpace::default()).const_null()
+    }
+
+    fn resolve_member_field(&self, field: &str) -> Option<(String, u32)> {
+        for (class_name, info) in &self.class_info {
+            if let Some(&idx) = info.field_indices.get(field) {
+                return Some((class_name.clone(), idx));
+            }
+        }
+        None
+    }
+
+    fn get_object_ptr(&self, expr_node: &ExprNode, _span: Span) -> PointerValue<'ctx> {
+        match &expr_node.expr {
+            Expr::Variable(name) => {
+                if let Some(info) = self.env.lookup(name) {
+                    return info.ptr;
+                }
+            }
+            Expr::Member { object, .. } => {
+                return self.get_object_ptr(object, _span);
+            }
+            _ => {}
+        }
+        self.context.ptr_type(AddressSpace::default()).const_null()
+    }
+
+    fn get_object_class(&self, expr_node: &ExprNode) -> Option<String> {
+        match &expr_node.expr {
+            Expr::Variable(name) => {
+                for (class_name, _) in &self.class_info {
+                    if self.env.lookup(name).is_some() {
+                        return Some(class_name.clone());
+                    }
+                }
+            }
+            Expr::Member { object, .. } => {
+                return self.get_object_class(object);
+            }
+            _ => {}
+        }
+        None
     }
 
     fn compile_const_literal(&self, lit: &Literal) -> Option<BasicValueEnum<'ctx>> {
@@ -937,6 +1103,11 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
             AstType::List(inner) => {
                 let elem = self.ast_type_to_llvm(inner);
                 self.get_list_struct_type(elem).into()
+            }
+            AstType::Class(name) => {
+                self.get_class_struct_ty(name)
+                    .map(|st| st.into())
+                    .unwrap_or(self.context.i64_type().into())
             }
             _ => self.context.i64_type().into(),
         }

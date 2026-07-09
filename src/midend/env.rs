@@ -1,8 +1,10 @@
 use std::collections::HashMap;
 
 use inkwell::basic_block::BasicBlock;
-use inkwell::types::BasicTypeEnum;
+use inkwell::types::{BasicTypeEnum, StructType};
 use inkwell::values::PointerValue;
+
+use crate::frontend::ast::expr::ExprNode;
 
 #[derive(Clone, Copy)]
 pub struct VarInfo<'ctx> {
@@ -14,6 +16,12 @@ pub struct VarInfo<'ctx> {
 pub struct LoopInfo<'ctx> {
     pub cond_bb: BasicBlock<'ctx>,
     pub exit_bb: BasicBlock<'ctx>,
+}
+
+pub struct ClassInfo<'ctx> {
+    pub struct_ty: StructType<'ctx>,
+    pub field_indices: HashMap<String, u32>,
+    pub field_defaults: Vec<Option<ExprNode>>,
 }
 
 pub struct Env<'ctx> {

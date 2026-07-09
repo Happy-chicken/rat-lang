@@ -816,16 +816,22 @@ impl<'a, 'diag> Parser<'a, 'diag> {
     }
 
     fn parse_fields(&mut self) -> ParseResult<Field> {
-        // 解析类的字段定义
         self.consume(TokenKind::Let, "Expected 'let' before field definition.")?;
         let field_name = self.consume(TokenKind::Identifier, "Expected field name.")?;
         let field_name = field_name.lexeme;
         self.consume(TokenKind::Colon, "Expected ':' after field name.")?;
         let field_type = self.parse_type()?;
+        let field_init = if self.check(TokenKind::Equal) {
+            self.advance()?;
+            Some(self.parse_expr()?)
+        } else {
+            None
+        };
         self.consume(TokenKind::Semicolon, "Expected ';' after field definition.")?;
         Ok(Field {
             name: field_name,
             ty: field_type,
+            init: field_init,
         })
     }
 

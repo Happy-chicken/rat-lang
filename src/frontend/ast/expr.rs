@@ -1,13 +1,13 @@
 use crate::common::span::Span;
 use crate::frontend::ast::printer::{AstPrint, branch, next_prefix};
 use std::fmt::Write;
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ExprNode {
     pub span: Span,
     pub expr: Expr,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Literal {
     Int(i64),
     Bool(bool),
@@ -16,7 +16,7 @@ pub enum Literal {
     StringLiteral(String),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Expr {
     Literal(Literal),
 
@@ -50,13 +50,9 @@ pub enum Expr {
     List {
         elements: Vec<ExprNode>,
     },
-    New {
-        cons: String,
-        args: Vec<ExprNode>,
-    },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum BinaryOp {
     Add,
     Sub,
@@ -75,7 +71,7 @@ pub enum BinaryOp {
     Or,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum UnaryOp {
     Neg,
     Not,
@@ -189,12 +185,7 @@ impl AstPrint for Expr {
             // List —— 去掉分号
             Expr::List { elements } => {
                 writeln!(output, "{}{}List", prefix, branch_str)?;
-                print_expr_list(elements, prefix, is_last, output) // 无分号
-            }
-            // New —— 去掉分号
-            Expr::New { cons, args } => {
-                writeln!(output, "{}{}New({})", prefix, branch_str, cons)?;
-                print_expr_list(args, prefix, is_last, output) // 无分号
+                print_expr_list(elements, prefix, is_last, output)
             }
         }
     }

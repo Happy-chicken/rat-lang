@@ -77,7 +77,7 @@ impl Symbol {
     }
 
     pub fn is_callable(&self) -> bool {
-        matches!(self.kind, SymbolKind::Function { .. })
+        matches!(self.kind, SymbolKind::Function { .. } | SymbolKind::Class { .. })
     }
 
     pub fn kind_name(&self) -> &'static str {

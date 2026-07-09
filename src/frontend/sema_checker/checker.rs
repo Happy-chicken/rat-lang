@@ -25,6 +25,7 @@ impl Pass for SemaChecker {
                 Item::FunctionDef(def) => self.check_function(def, ctx, diag),
                 Item::Impl(imp) => self.check_impl(imp, ctx, diag),
                 Item::VarDef(global) => self.check_global_var(global, ctx, diag),
+                Item::Class(class) => self.check_class_defaults(class, ctx, diag),
                 _ => {}
             }
         }
@@ -221,20 +222,27 @@ impl SemaChecker {
                                 .error(expr_node.span, format!("`{}` is not callable", name))
                                 .build();
                             diag.emit(err);
-                        } else if let SymbolKind::Function { params, .. } = &s.kind {
-                            if params.len() != args.len() {
-                                let err = diag
-                                    .error(
-                                        expr_node.span,
-                                        format!(
+                        } else {
+                            match &s.kind {
+                                SymbolKind::Function { params, .. } => {
+                                    if params.len() != args.len() {
+                                        let err = diag.error(expr_node.span, format!(
                                             "function `{}` expects {} arguments, got {}",
-                                            name,
-                                            params.len(),
-                                            args.len()
-                                        ),
-                                    )
-                                    .build();
-                                diag.emit(err);
+                                            name, params.len(), args.len()
+                                        )).build();
+                                        diag.emit(err);
+                                    }
+                                }
+                                SymbolKind::Class { fields } => {
+                                    if args.len() > fields.len() {
+                                        let err = diag.error(expr_node.span, format!(
+                                            "class `{}` has {} fields but got {} arguments",
+                                            name, fields.len(), args.len()
+                                        )).build();
+                                        diag.emit(err);
+                                    }
+                                }
+                                _ => {}
                             }
                         }
                     }
@@ -258,18 +266,6 @@ impl SemaChecker {
                     self.check_expr(elem, ctx, diag);
                 }
             }
-
-            Expr::New { cons, args } => {
-                if ctx.symbol_table.resolve_global(cons).is_none() {
-                    let err = diag
-                        .error(expr_node.span, format!("class `{}` not found", cons))
-                        .build();
-                    diag.emit(err);
-                }
-                for arg in args {
-                    self.check_expr(arg, ctx, diag);
-                }
-            }
         }
     }
 
@@ -281,6 +277,19 @@ impl SemaChecker {
     ) {
         if let Some(ref init_expr) = global.init {
             self.check_expr(init_expr, ctx, diag);
+        }
+    }
+
+    fn check_class_defaults(
+        &mut self,
+        class: &Class,
+        ctx: &mut SemaCtxt,
+        diag: &mut DiagCtxt,
+    ) {
+        for field in &class.fields {
+            if let Some(ref default_expr) = field.init {
+                self.check_expr(default_expr, ctx, diag);
+            }
         }
     }
 }
