@@ -25,6 +25,7 @@ impl Pass for Resolver {
             match &item_node.item {
                 Item::Class(_) => self.declare_type_item(item_node, ctx, diag),
                 Item::Trait(_) => self.declare_trait_item(item_node, ctx, diag),
+                Item::Impl(imp) => self.validate_impl_target(imp, item_node.span, ctx, diag),
                 _ => {}
             }
         }
@@ -34,6 +35,7 @@ impl Pass for Resolver {
                 Item::FunctionDef(_) | Item::FunctionDecl(_) => {
                     self.declare_value_item(item_node, ctx, diag)
                 }
+                Item::Impl(imp) => self.declare_impl_methods(imp, item_node.span, ctx, diag),
                 Item::VarDef(global) => {
                     self.declare_global_var(global, item_node.span, ctx, diag);
                 }
@@ -202,13 +204,81 @@ impl Resolver {
         ctx: &mut SemaCtxt,
         diag: &mut DiagCtxt,
     ) {
-        let symbol = Symbol::new_variable(
-            global.name.clone(),
-            global.ty.clone(),
-            false,
-            span,
-        );
+        let symbol = Symbol::new_variable(global.name.clone(), global.ty.clone(), false, span);
         self.declare_top_level(symbol, ctx, diag);
+    }
+
+    fn validate_impl_target(
+        &mut self,
+        imp: &Impl,
+        span: Span,
+        ctx: &SemaCtxt,
+        diag: &mut DiagCtxt,
+    ) {
+        if ctx.symbol_table.resolve_global(&imp.class_name).is_none() {
+            let err = diag
+                .error(span, format!("class `{}` not found", imp.class_name))
+                .build();
+            diag.emit(err);
+        }
+        if let Some(trait_name) = &imp.trait_name {
+            if ctx.symbol_table.resolve_global(trait_name).is_none() {
+                let err = diag
+                    .error(span, format!("trait `{}` not found", trait_name))
+                    .build();
+                diag.emit(err);
+            }
+        }
+    }
+
+    fn declare_impl_methods(
+        &mut self,
+        imp: &Impl,
+        span: Span,
+        ctx: &mut SemaCtxt,
+        diag: &mut DiagCtxt,
+    ) {
+        for method in &imp.methods {
+            let header = &method.function_header;
+
+            if let Some(first) = header.params.first() {
+                if first.name == "self" {
+                    let expected = Type::Class(imp.class_name.clone());
+                    if first.ty != expected {
+                        let err = diag
+                            .error(
+                                span,
+                                format!(
+                                    "expected `self: {}`, found `self: {}`",
+                                    imp.class_name,
+                                    type_display(&first.ty)
+                                ),
+                            )
+                            .build();
+                        diag.emit(err);
+                    }
+                }
+
+                fn type_display(ty: &Type) -> String {
+                    match ty {
+                        Type::Int => "int".into(),
+                        Type::Float => "float".into(),
+                        Type::Bool => "bool".into(),
+                        Type::Char => "char".into(),
+                        Type::Str => "str".into(),
+                        Type::Void => "void".into(),
+                        Type::Ptr(inner) => format!("ptr<{}>", type_display(inner)),
+                        Type::List(inner) => format!("list<{}>", type_display(inner)),
+                        Type::Class(name) => name.clone(),
+                    }
+                }
+            }
+
+            let param_types: Vec<Type> = header.params.iter().map(|p| p.ty.clone()).collect();
+            let ret_ty = header.return_type.clone().unwrap_or(Type::Void);
+            let symbol = Symbol::new_function(header.name.clone(), param_types, ret_ty, span);
+            self.declare_top_level(symbol, ctx, diag);
+        }
     }
 
     fn check_struct_recursion(&mut self, program: &Program, diag: &mut DiagCtxt) {
@@ -250,8 +320,14 @@ impl Resolver {
             Type::Class(name) => {
                 deps.push(name.as_str());
             }
-            Type::Ptr(_) | Type::List(_) | Type::Int | Type::Float | Type::Bool
-            | Type::Char | Type::Str | Type::Void => {}
+            Type::Ptr(_)
+            | Type::List(_)
+            | Type::Int
+            | Type::Float
+            | Type::Bool
+            | Type::Char
+            | Type::Str
+            | Type::Void => {}
         }
     }
 

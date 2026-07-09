@@ -279,6 +279,40 @@ impl TypeInferer {
         ctx: &mut SemaCtxt,
         diag: &mut DiagCtxt,
     ) -> Type {
+        if let Expr::Member { object, field } = &callee.expr {
+            if let Some(sym) = ctx.symbol_table.resolve(field) {
+                let s = sym.borrow();
+                if let SymbolKind::Function { params, return_type } = &s.kind {
+                    let obj_ty = self.infer_expr(&object.expr, object.span, ctx, diag);
+
+                    let mut arg_types: Vec<Type> = vec![obj_ty];
+                    for a in args {
+                        arg_types.push(self.infer_expr(&a.expr, a.span, ctx, diag));
+                    }
+
+                    let tc_params: Vec<Type> =
+                        params.iter().map(ast_type_to_tc).collect();
+                    let tc_ret = ast_type_to_tc(return_type);
+
+                    if tc_params.len() != arg_types.len() {
+                        let err = diag
+                            .error(span, format!(
+                                "method `{}` expects {} arguments (including self), got {}",
+                                field, tc_params.len(), arg_types.len()
+                            )).build();
+                        diag.emit(err);
+                        return Type::Error;
+                    }
+
+                    let mut unifier = Unifier::new(&mut ctx.type_ctx);
+                    for (p, a) in tc_params.iter().zip(arg_types.iter()) {
+                        let _ = unifier.unify(p, a);
+                    }
+                    return tc_ret;
+                }
+            }
+        }
+
         let func_ty = self.infer_expr(&callee.expr, callee.span, ctx, diag);
         let resolved = ctx.type_ctx.resolve_type(&func_ty);
 
@@ -374,6 +408,8 @@ impl TypeInferer {
                         } => {
                             if let Some(field_ty) = fields.get(field) {
                                 ast_type_to_tc(field_ty)
+                            } else if ctx.symbol_table.resolve_global(field).is_some() {
+                                ctx.type_ctx.fresh_type_var()
                             } else {
                                 let err = diag
                                     .error(

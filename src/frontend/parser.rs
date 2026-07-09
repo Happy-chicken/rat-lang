@@ -146,12 +146,30 @@ impl<'a, 'diag> Parser<'a, 'diag> {
     fn parse_item(&mut self) -> ParseResult<ItemNode> {
         // 解析函数、变量等
         match self.peek().map(|t| t.kind) {
-            Some(TokenKind::Decl) => Ok(ItemNode { span: self.current_span(), item: Item::FunctionDecl(self.parse_func_decl()?)}),
-            Some(TokenKind::Def) => Ok(ItemNode { span: self.current_span(), item: Item::FunctionDef(self.parse_function()?)}),
-            Some(TokenKind::Class) => Ok(ItemNode { span: self.current_span(), item: Item::Class(self.parse_class()?)}),
-            Some(TokenKind::Trait) => Ok(ItemNode { span: self.current_span(), item: Item::Trait(self.parse_trait()?)}),
-            Some(TokenKind::Impl) => Ok(ItemNode { span: self.current_span(), item: Item::Impl(self.parse_impl()?)}),
-            Some(TokenKind::Let) => Ok(ItemNode { span: self.current_span(), item: Item::VarDef(self.parse_global_var()?)}),
+            Some(TokenKind::Decl) => Ok(ItemNode {
+                span: self.current_span(),
+                item: Item::FunctionDecl(self.parse_func_decl()?),
+            }),
+            Some(TokenKind::Def) => Ok(ItemNode {
+                span: self.current_span(),
+                item: Item::FunctionDef(self.parse_function()?),
+            }),
+            Some(TokenKind::Class) => Ok(ItemNode {
+                span: self.current_span(),
+                item: Item::Class(self.parse_class()?),
+            }),
+            Some(TokenKind::Trait) => Ok(ItemNode {
+                span: self.current_span(),
+                item: Item::Trait(self.parse_trait()?),
+            }),
+            Some(TokenKind::Impl) => Ok(ItemNode {
+                span: self.current_span(),
+                item: Item::Impl(self.parse_impl()?),
+            }),
+            Some(TokenKind::Let) => Ok(ItemNode {
+                span: self.current_span(),
+                item: Item::VarDef(self.parse_global_var()?),
+            }),
             _ => self.unexpected("Expected 'let', 'def', 'decl', 'class', 'trait', 'impl'."),
         }
     }
@@ -170,7 +188,10 @@ impl<'a, 'diag> Parser<'a, 'diag> {
                 _ => {
                     let expr = self.parse_expr()?;
                     self.consume(TokenKind::Semicolon, "Expected ';' after expression.")?;
-                    Ok(StmtNode { span: expr.span, stmt: Stmt::ExprStmt(expr) })
+                    Ok(StmtNode {
+                        span: expr.span,
+                        stmt: Stmt::ExprStmt(expr),
+                    })
                 }
             },
             None => self.unexpected("Unexpected end of input"),
@@ -480,6 +501,10 @@ impl<'a, 'diag> Parser<'a, 'diag> {
                     expr: Expr::List { elements },
                 })
             }
+            TokenKind::Sself => Ok(ExprNode {
+                span: token.span,
+                expr: Expr::Variable("self".to_string()),
+            }),
             _ => panic!("Unexpected token: {:?}", token),
         }
     }
@@ -505,13 +530,15 @@ impl<'a, 'diag> Parser<'a, 'diag> {
         } else {
             Block { stmts: Vec::new() }
         };
-        Ok(StmtNode { span: self.current_span(), 
+        Ok(StmtNode {
+            span: self.current_span(),
             stmt: Stmt::If {
                 condition: condition,
                 then_branch: then_branch,
                 elif_branch: elif_branches,
                 else_branch: else_branch,
-        } })
+            },
+        })
     }
 
     fn parse_while_stmt(&mut self) -> ParseResult<StmtNode> {
@@ -522,15 +549,13 @@ impl<'a, 'diag> Parser<'a, 'diag> {
         )?;
         let condition = self.parse_expr()?;
         let body = self.parse_block()?;
-        Ok(
-            StmtNode { 
-                span: self.current_span(), 
-                stmt: Stmt::Loop {
-                    condition: condition,
-                    body: body,
-                    }
-                }
-            )
+        Ok(StmtNode {
+            span: self.current_span(),
+            stmt: Stmt::Loop {
+                condition: condition,
+                body: body,
+            },
+        })
     }
 
     fn parse_return_stmt(&mut self) -> ParseResult<StmtNode> {
@@ -545,7 +570,10 @@ impl<'a, 'diag> Parser<'a, 'diag> {
             None
         };
         self.consume(TokenKind::Semicolon, "Expected ';' after return statement.")?;
-        Ok(StmtNode { span: return_token.span, stmt: Stmt::Return(expr) })
+        Ok(StmtNode {
+            span: return_token.span,
+            stmt: Stmt::Return(expr),
+        })
     }
 
     fn parse_break_stmt(&mut self) -> ParseResult<StmtNode> {
@@ -554,7 +582,10 @@ impl<'a, 'diag> Parser<'a, 'diag> {
             "Expected 'break' at the beginning of break statement.",
         )?;
         self.consume(TokenKind::Semicolon, "Expected ';' after break statement.")?;
-        Ok(StmtNode { span: token.span, stmt: Stmt::Break })
+        Ok(StmtNode {
+            span: token.span,
+            stmt: Stmt::Break,
+        })
     }
 
     fn parse_continue_stmt(&mut self) -> ParseResult<StmtNode> {
@@ -562,13 +593,22 @@ impl<'a, 'diag> Parser<'a, 'diag> {
             TokenKind::Continue,
             "Expected 'continue' at the beginning of continue statement.",
         )?;
-        self.consume(TokenKind::Semicolon, "Expected ';' after continue statement.")?;
-        Ok(StmtNode { span: token.span, stmt: Stmt::Continue })
+        self.consume(
+            TokenKind::Semicolon,
+            "Expected ';' after continue statement.",
+        )?;
+        Ok(StmtNode {
+            span: token.span,
+            stmt: Stmt::Continue,
+        })
     }
 
     fn parse_block_stmt(&mut self) -> ParseResult<StmtNode> {
         let block = self.parse_block()?;
-        Ok(StmtNode { span: self.current_span(), stmt: Stmt::BlockStmt(block) })
+        Ok(StmtNode {
+            span: self.current_span(),
+            stmt: Stmt::BlockStmt(block),
+        })
     }
 
     fn parse_global_var(&mut self) -> ParseResult<GlobalVar> {
@@ -704,9 +744,12 @@ impl<'a, 'diag> Parser<'a, 'diag> {
     }
 
     fn parse_parameter(&mut self) -> ParseResult<Parameter> {
-        // 解析函数参数
-        let param_name = self.consume(TokenKind::Identifier, "Expected parameter name.")?;
-        let param_name = param_name.lexeme;
+        let param_tok = if self.check(TokenKind::Sself) {
+            self.advance()?
+        } else {
+            self.consume(TokenKind::Identifier, "Expected parameter name.")?
+        };
+        let param_name = param_tok.lexeme;
         self.consume(TokenKind::Colon, "Expected ':' after parameter name.")?;
         let param_type = self.parse_type()?;
         Ok(Parameter {

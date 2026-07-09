@@ -21,6 +21,7 @@ pub struct LoopInfo<'ctx> {
 pub struct ClassInfo<'ctx> {
     pub struct_ty: StructType<'ctx>,
     pub field_indices: HashMap<String, u32>,
+    pub field_types: Vec<BasicTypeEnum<'ctx>>,
     pub field_defaults: Vec<Option<ExprNode>>,
 }
 

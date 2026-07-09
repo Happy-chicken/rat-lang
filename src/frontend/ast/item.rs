@@ -1,9 +1,9 @@
+use crate::common::span::Span;
+use crate::frontend::ast::expr::ExprNode;
 use crate::frontend::ast::printer::{AstPrint, branch, next_prefix};
 use crate::frontend::ast::stmt::Block;
-use crate::frontend::ast::expr::ExprNode;
 use crate::frontend::ast::typ::Type;
 use std::fmt::Write;
-use crate::common::span::Span;
 
 #[derive(Debug)]
 pub struct ItemNode {

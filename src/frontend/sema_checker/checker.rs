@@ -23,7 +23,7 @@ impl Pass for SemaChecker {
         for item_node in &program.items {
             match &item_node.item {
                 Item::FunctionDef(def) => self.check_function(def, ctx, diag),
-                Item::Impl(imp) => self.check_impl(imp, ctx, diag),
+                Item::Impl(imp) => self.check_impl(imp, item_node.span, ctx, diag),
                 Item::VarDef(global) => self.check_global_var(global, ctx, diag),
                 Item::Class(class) => self.check_class_defaults(class, ctx, diag),
                 _ => {}
@@ -64,12 +64,10 @@ impl SemaChecker {
         ctx.symbol_table.exit_scope();
     }
 
-    fn check_impl(&mut self, imp: &Impl, ctx: &mut SemaCtxt, diag: &mut DiagCtxt) {
-        let dummy_span = Span::new(0.into(), 0.into());
-
+    fn check_impl(&mut self, imp: &Impl, span: Span, ctx: &mut SemaCtxt, diag: &mut DiagCtxt) {
         if ctx.symbol_table.resolve_global(&imp.class_name).is_none() {
             let err = diag
-                .error(dummy_span, format!("class `{}` not found", imp.class_name))
+                .error(span, format!("class `{}` not found", imp.class_name))
                 .build();
             diag.emit(err);
         }
@@ -77,7 +75,7 @@ impl SemaChecker {
         if let Some(trait_name) = &imp.trait_name {
             if ctx.symbol_table.resolve_global(trait_name).is_none() {
                 let err = diag
-                    .error(dummy_span, format!("trait `{}` not found", trait_name))
+                    .error(span, format!("trait `{}` not found", trait_name))
                     .build();
                 diag.emit(err);
             }
@@ -99,6 +97,9 @@ impl SemaChecker {
     fn check_stmt(&mut self, stmt_node: &StmtNode, ctx: &mut SemaCtxt, diag: &mut DiagCtxt) {
         match &stmt_node.stmt {
             Stmt::VarDef { name, ty, init } => {
+                if let Some(init_expr) = init {
+                    self.check_expr(init_expr, ctx, diag);
+                }
                 let symbol = Symbol::new_variable(name.clone(), ty.clone(), false, stmt_node.span);
                 if let Err(existing) = ctx.symbol_table.declare(symbol) {
                     let err = diag
@@ -112,9 +113,6 @@ impl SemaChecker {
                         ))
                         .build();
                     diag.emit(err);
-                }
-                if let Some(init_expr) = init {
-                    self.check_expr(init_expr, ctx, diag);
                 }
             }
 
@@ -214,8 +212,15 @@ impl SemaChecker {
 
             Expr::Call { callee, args } => {
                 self.check_expr(callee, ctx, diag);
-                if let Expr::Variable(ref name) = callee.expr {
-                    if let Some(sym) = ctx.symbol_table.resolve(name) {
+
+                let func_name: Option<String> = match &callee.expr {
+                    Expr::Variable(name) => Some(name.clone()),
+                    Expr::Member { field, .. } => Some(field.clone()),
+                    _ => None,
+                };
+
+                if let Some(name) = func_name {
+                    if let Some(sym) = ctx.symbol_table.resolve(&name) {
                         let s = sym.borrow();
                         if !s.is_callable() {
                             let err = diag
@@ -225,20 +230,40 @@ impl SemaChecker {
                         } else {
                             match &s.kind {
                                 SymbolKind::Function { params, .. } => {
-                                    if params.len() != args.len() {
-                                        let err = diag.error(expr_node.span, format!(
-                                            "function `{}` expects {} arguments, got {}",
-                                            name, params.len(), args.len()
-                                        )).build();
+                                    let is_method = matches!(&callee.expr, Expr::Member { .. });
+                                    let expected = if is_method {
+                                        params.len().saturating_sub(1)
+                                    } else {
+                                        params.len()
+                                    };
+                                    if expected != args.len() {
+                                        let err = diag
+                                            .error(
+                                                expr_node.span,
+                                                format!(
+                                                    "function `{}` expects {} arguments, got {}",
+                                                    name,
+                                                    expected,
+                                                    args.len()
+                                                ),
+                                            )
+                                            .build();
                                         diag.emit(err);
                                     }
                                 }
                                 SymbolKind::Class { fields } => {
                                     if args.len() > fields.len() {
-                                        let err = diag.error(expr_node.span, format!(
-                                            "class `{}` has {} fields but got {} arguments",
-                                            name, fields.len(), args.len()
-                                        )).build();
+                                        let err = diag
+                                            .error(
+                                                expr_node.span,
+                                                format!(
+                                                    "class `{}` has {} fields but got {} arguments",
+                                                    name,
+                                                    fields.len(),
+                                                    args.len()
+                                                ),
+                                            )
+                                            .build();
                                         diag.emit(err);
                                     }
                                 }
@@ -269,23 +294,13 @@ impl SemaChecker {
         }
     }
 
-    fn check_global_var(
-        &mut self,
-        global: &GlobalVar,
-        ctx: &mut SemaCtxt,
-        diag: &mut DiagCtxt,
-    ) {
+    fn check_global_var(&mut self, global: &GlobalVar, ctx: &mut SemaCtxt, diag: &mut DiagCtxt) {
         if let Some(ref init_expr) = global.init {
             self.check_expr(init_expr, ctx, diag);
         }
     }
 
-    fn check_class_defaults(
-        &mut self,
-        class: &Class,
-        ctx: &mut SemaCtxt,
-        diag: &mut DiagCtxt,
-    ) {
+    fn check_class_defaults(&mut self, class: &Class, ctx: &mut SemaCtxt, diag: &mut DiagCtxt) {
         for field in &class.fields {
             if let Some(ref default_expr) = field.init {
                 self.check_expr(default_expr, ctx, diag);
