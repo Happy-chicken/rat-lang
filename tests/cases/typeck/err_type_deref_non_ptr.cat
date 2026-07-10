@@ -1,0 +1,7 @@
+// @fail
+// @error: dereference requires pointer type
+
+def main() {
+    let x = *42;
+    return;
+}

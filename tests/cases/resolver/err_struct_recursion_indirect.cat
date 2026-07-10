@@ -1,0 +1,14 @@
+// @fail
+// @error: recursive type definition
+
+class A {
+    let b: B;
+}
+
+class B {
+    let c: C;
+}
+
+class C {
+    let a: A;
+}

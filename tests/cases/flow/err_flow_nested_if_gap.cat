@@ -1,0 +1,14 @@
+// @fail
+// @error: not all control paths return a value
+
+def classify(x: int) -> int {
+    if x > 0 {
+        if x > 100 {
+            return 100;
+        } elif x > 50 {
+            return 50;
+        }
+    } else {
+        return -1;
+    }
+}

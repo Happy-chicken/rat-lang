@@ -1,0 +1,13 @@
+// @pass
+// nested blocks
+
+def main() -> int {
+    let x: int = 1;
+    {
+        let y: int = 2;
+        {
+            let z: int = 3;
+            return x + y + z;
+        }
+    }
+}

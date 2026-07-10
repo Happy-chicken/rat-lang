@@ -1,0 +1,10 @@
+// @pass
+// @warning: unreachable statement
+
+def run() {
+    while true {
+        continue;
+        let x: int = 1;
+    }
+    return;
+}

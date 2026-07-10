@@ -1,0 +1,9 @@
+// @fail
+// @error: defined multiple times
+// global var collides with function name
+
+let main: int = 1;
+
+def main() {
+    return;
+}

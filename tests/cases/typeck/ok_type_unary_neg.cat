@@ -1,0 +1,7 @@
+// @pass
+// unary negation on numeric types
+
+def main() -> int {
+    let x = 42;
+    return -x;
+}

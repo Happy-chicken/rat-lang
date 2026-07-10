@@ -1,0 +1,8 @@
+// @pass
+// calling a declared function is valid
+
+decl f() -> int;
+
+def main() -> int {
+    return f();
+}

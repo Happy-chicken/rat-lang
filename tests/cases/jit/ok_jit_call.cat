@@ -1,0 +1,10 @@
+// @pass
+// @jit: 30
+
+def add(a: int, b: int) -> int {
+    return a + b;
+}
+
+def main() -> int {
+    return add(10, 20);
+}

@@ -1,0 +1,13 @@
+// @pass
+// @jit: 30
+// defaults applied to uninitialized class variable
+
+class Point {
+    let x: int = 10;
+    let y: int = 20;
+}
+
+def main() -> int {
+    let p: Point;
+    return p.x + p.y;
+}

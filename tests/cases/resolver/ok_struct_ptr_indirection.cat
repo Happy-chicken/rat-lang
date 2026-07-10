@@ -1,0 +1,6 @@
+// @pass
+// ptr<T> indirection breaks recursion — this is fine
+
+class Node {
+    let next: ptr<Node>;
+}

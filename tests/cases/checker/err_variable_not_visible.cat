@@ -1,0 +1,9 @@
+// @fail
+// @error: cannot find value `b`
+
+def main() -> int {
+    if true {
+        let b: int = 2;
+    }
+    return b;
+}

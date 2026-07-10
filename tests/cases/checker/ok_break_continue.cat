@@ -1,0 +1,12 @@
+// @pass
+// break and continue are valid inside a while loop
+
+def main() {
+    while true {
+        if true {
+            break;
+        }
+        continue;
+    }
+    return;
+}

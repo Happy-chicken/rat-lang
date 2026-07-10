@@ -1,0 +1,12 @@
+// @pass
+// @jit: 2
+// inner scope can access outer variables
+
+def main() -> int {
+    let a: int = 1;
+    if true {
+        let b: int = a + 1;
+        return b;
+    }
+    return a;
+}

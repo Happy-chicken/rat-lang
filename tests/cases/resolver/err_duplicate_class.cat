@@ -1,0 +1,10 @@
+// @fail
+// @error: defined multiple times
+
+class Foo {
+    let a: int;
+}
+
+class Foo {
+    let b: float;
+}

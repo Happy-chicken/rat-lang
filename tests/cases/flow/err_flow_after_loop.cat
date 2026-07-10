@@ -1,0 +1,8 @@
+// @fail
+// @error: not all control paths return a value
+
+def search(x: int) -> int {
+    while x > 0 {
+        x = x - 1;
+    }
+}

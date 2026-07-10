@@ -1,0 +1,13 @@
+// @pass
+// @jit: 0
+
+def main() -> int {
+    let x = 0;
+    if x > 0 {
+        return 1;
+    } elif x < 0 {
+        return -1;
+    } else {
+        return 0;
+    }
+}

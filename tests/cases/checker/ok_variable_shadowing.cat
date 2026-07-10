@@ -1,0 +1,12 @@
+// @pass
+// @jit: 2
+// inner scope may shadow outer variable
+
+def main() -> int {
+    let x: int = 1;
+    if true {
+        let x: int = 2;
+        return x;
+    }
+    return x;
+}

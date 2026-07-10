@@ -1,0 +1,7 @@
+// @pass
+// indexing string returns char
+
+def main() {
+    let c: char = "hello"[0];
+    return;
+}

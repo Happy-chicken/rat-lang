@@ -1,0 +1,7 @@
+// @fail
+// @error: break statement outside of loop
+
+def main() {
+    break;
+    return;
+}

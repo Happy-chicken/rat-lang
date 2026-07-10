@@ -1,0 +1,7 @@
+// @pass
+// @jit: 40
+
+def main() -> int {
+    let xs: list<int> = [10, 20, 30];
+    return xs[0] + xs[2];
+}

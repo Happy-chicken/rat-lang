@@ -1,0 +1,23 @@
+// @pass
+// valid program with class, trait, function, and impl
+
+class Point {
+    let x: int;
+    let y: int;
+}
+
+trait Movable {
+    decl move() -> none;
+}
+
+def distance(a: Point, b: Point) -> float {
+    return 0.0;
+}
+
+decl origin() -> Point;
+
+impl Point {
+    def new() -> Point {
+        return origin();
+    }
+}

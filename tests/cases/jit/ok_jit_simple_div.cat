@@ -1,0 +1,6 @@
+// @pass
+// @jit: 5
+
+def main() -> int {
+    return 10 / 2;
+}

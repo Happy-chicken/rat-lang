@@ -1,0 +1,6 @@
+// @fail
+// @error: return type mismatch
+
+def main() -> int {
+    return true;
+}

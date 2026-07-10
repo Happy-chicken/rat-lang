@@ -1,0 +1,10 @@
+// @pass
+// @jit: 2
+
+def main() -> int {
+    if false {
+        return 1;
+    } else {
+        return 2;
+    }
+}

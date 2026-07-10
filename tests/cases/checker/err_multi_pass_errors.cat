@@ -1,0 +1,8 @@
+// @fail
+// both resolver error (undefined var) and flow error (missing return)
+
+def broken(x: int) -> int {
+    if x > 0 {
+        return z;
+    }
+}

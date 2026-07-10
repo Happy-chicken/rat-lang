@@ -1,0 +1,8 @@
+// @pass
+// global list variable
+
+let g_list: list<int> = [1, 2, 3];
+
+def main() -> int {
+    return 0;
+}

@@ -1,0 +1,12 @@
+// @pass
+// field access on class returns field type
+
+class Point {
+    let x: int;
+    let y: int;
+}
+
+def main() -> int {
+    let p: Point;
+    return p.x;
+}

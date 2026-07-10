@@ -1,0 +1,8 @@
+// @fail
+// @error: not callable
+
+def main() {
+    let x: int = 1;
+    x();
+    return;
+}

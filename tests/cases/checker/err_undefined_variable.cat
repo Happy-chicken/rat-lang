@@ -1,0 +1,6 @@
+// @fail
+// @error: cannot find value `x`
+
+def main() -> int {
+    return x;
+}

@@ -1,0 +1,12 @@
+// @pass
+// impl block for existing class is valid
+
+class Foo {
+    let a: int;
+}
+
+impl Foo {
+    def m() {
+        return;
+    }
+}

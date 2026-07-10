@@ -1,0 +1,8 @@
+// @fail
+// @error: expects 2 arguments, got 1
+
+decl add(a: int, b: int) -> int;
+
+def main() -> int {
+    return add(1);
+}

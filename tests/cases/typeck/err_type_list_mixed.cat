@@ -1,0 +1,7 @@
+// @fail
+// @error: list elements have mismatched types
+
+def main() {
+    let xs = [1, true, 3];
+    return;
+}

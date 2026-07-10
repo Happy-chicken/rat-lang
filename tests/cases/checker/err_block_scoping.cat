@@ -1,0 +1,10 @@
+// @fail
+// @error: cannot find value `y`
+// variable not visible outside its block
+
+def main() {
+    {
+        let y: int = 2;
+    }
+    return y;
+}

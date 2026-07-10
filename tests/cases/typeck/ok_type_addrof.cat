@@ -1,0 +1,8 @@
+// @pass
+// address-of creates a pointer type
+
+def main() {
+    let x: int = 1;
+    let p: ptr<int> = &x;
+    return;
+}

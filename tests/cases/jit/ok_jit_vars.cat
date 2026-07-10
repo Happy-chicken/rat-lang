@@ -1,0 +1,8 @@
+// @pass
+// @jit: 100
+
+def main() -> int {
+    let x: int = 60;
+    let y: int = 40;
+    return x + y;
+}

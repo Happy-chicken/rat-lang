@@ -1,0 +1,10 @@
+// @fail
+// @error: not all control paths return a value
+
+def sign(x: int) -> int {
+    if x > 0 {
+        return 1;
+    } elif x < 0 {
+        return -1;
+    }
+}

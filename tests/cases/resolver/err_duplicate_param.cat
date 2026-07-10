@@ -1,0 +1,6 @@
+// @fail
+// @error: duplicate parameter name
+
+def f(x: int, x: float) {
+    return;
+}

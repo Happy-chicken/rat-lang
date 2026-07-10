@@ -1,0 +1,12 @@
+// @pass
+// @jit: 50
+
+class Pair {
+    let a: int;
+    let b: int;
+}
+
+def main() -> int {
+    let p = Pair(20, 30);
+    return p.a + p.b;
+}

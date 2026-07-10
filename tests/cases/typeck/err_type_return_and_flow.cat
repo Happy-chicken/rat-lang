@@ -1,0 +1,10 @@
+// @fail
+// @error: return type mismatch
+
+def bad(x: bool) -> int {
+    if x {
+        return true;
+    } else {
+        return 1;
+    }
+}

@@ -1,0 +1,7 @@
+// @pass
+// comparison operators return bool
+
+def main() -> bool {
+    let x = 1 < 2;
+    return x == true;
+}

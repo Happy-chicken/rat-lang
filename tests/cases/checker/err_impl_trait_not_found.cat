@@ -1,0 +1,12 @@
+// @fail
+// @error: trait `NoSuchTrait` not found
+
+class Foo {
+    let a: int;
+}
+
+impl NoSuchTrait for Foo {
+    def m() {
+        return;
+    }
+}

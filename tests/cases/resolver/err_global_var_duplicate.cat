@@ -1,0 +1,9 @@
+// @fail
+// @error: defined multiple times
+
+let g_x: int = 1;
+let g_x: int = 2;
+
+def main() {
+    return;
+}

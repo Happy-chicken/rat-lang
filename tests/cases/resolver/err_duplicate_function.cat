@@ -1,0 +1,10 @@
+// @fail
+// @error: defined multiple times
+
+def f() {
+    return;
+}
+
+def f() -> int {
+    return 1;
+}

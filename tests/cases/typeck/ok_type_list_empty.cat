@@ -1,0 +1,7 @@
+// @pass
+// empty list literal
+
+def main() {
+    let xs: list<int> = [];
+    return;
+}

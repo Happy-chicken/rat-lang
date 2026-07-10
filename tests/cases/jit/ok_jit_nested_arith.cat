@@ -1,0 +1,10 @@
+// @pass
+// @jit: 70
+
+def main() -> int {
+    let a = 10;
+    let b = 20;
+    let c = a + b;
+    let d = c * 2;
+    return d + a;
+}

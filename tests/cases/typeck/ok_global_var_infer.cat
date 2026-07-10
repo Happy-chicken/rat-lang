@@ -1,0 +1,9 @@
+// @pass
+// global var without type annotation, inferred from init
+
+let g_name = "hello";
+let g_count = 100;
+
+def main() -> int {
+    return g_count;
+}

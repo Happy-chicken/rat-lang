@@ -1,0 +1,8 @@
+// @fail
+// @error: class `NoSuchClass` not found
+
+impl NoSuchClass {
+    def m() {
+        return;
+    }
+}

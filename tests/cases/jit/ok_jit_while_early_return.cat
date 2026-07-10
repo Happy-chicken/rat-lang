@@ -1,0 +1,13 @@
+// @pass
+// @jit: 4
+
+def main() -> int {
+    let i = 0;
+    while i < 10 {
+        i = i + 1;
+        if i > 3 {
+            return i;
+        }
+    }
+    return 0;
+}

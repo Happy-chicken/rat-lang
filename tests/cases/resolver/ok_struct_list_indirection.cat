@@ -1,0 +1,6 @@
+// @pass
+// list<T> indirection breaks recursion — this is fine
+
+class Node {
+    let children: list<Node>;
+}

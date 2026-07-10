@@ -1,0 +1,10 @@
+// @fail
+// @error: defined multiple times
+
+trait T {
+    decl m() -> int;
+}
+
+trait T {
+    decl n() -> float;
+}

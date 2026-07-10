@@ -1,0 +1,12 @@
+// @pass
+// return inside loop with both if branches returning — function returns on all paths
+
+def search() -> int {
+    while true {
+        if true {
+            return 1;
+        } else {
+            return 0;
+        }
+    }
+}

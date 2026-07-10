@@ -1,0 +1,10 @@
+// @pass
+// classes with non-recursive fields are fine
+
+class A {
+    let x: int;
+}
+
+class B {
+    let y: float;
+}

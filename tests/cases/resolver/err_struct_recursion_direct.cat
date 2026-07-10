@@ -1,0 +1,6 @@
+// @fail
+// @error: recursive type definition
+
+class Node {
+    let next: Node;
+}

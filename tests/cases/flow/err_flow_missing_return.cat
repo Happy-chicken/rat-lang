@@ -1,0 +1,6 @@
+// @fail
+// @error: not all control paths return a value
+
+def compute(x: int) -> int {
+    let r: int = x + 1;
+}

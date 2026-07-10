@@ -1,0 +1,11 @@
+// @pass
+// field defaults in class definition
+
+class Point {
+    let x: int = 10;
+    let y: int = 20;
+}
+
+def main() -> int {
+    return 0;
+}

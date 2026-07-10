@@ -1,0 +1,9 @@
+// @fail
+// @error: condition must be bool
+
+def main() {
+    if 42 {
+        return;
+    }
+    return;
+}

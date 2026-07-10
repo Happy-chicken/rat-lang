@@ -1,0 +1,8 @@
+// @fail
+// @error: argument type mismatch
+
+decl add(a: int, b: int) -> int;
+
+def main() -> int {
+    return add(true, 2);
+}

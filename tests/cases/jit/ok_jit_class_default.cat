@@ -1,0 +1,12 @@
+// @pass
+// @jit: 25
+
+class Point {
+    let x: int = 10;
+    let y: int = 20;
+}
+
+def main() -> int {
+    let p: Point = Point(5);
+    return p.x + p.y;
+}

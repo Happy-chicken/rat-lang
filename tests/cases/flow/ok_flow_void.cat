@@ -1,0 +1,10 @@
+// @pass
+// void function does not need to return on all paths
+
+def run() {
+    while true {
+        if true {
+            break;
+        }
+    }
+}

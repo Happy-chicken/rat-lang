@@ -1,0 +1,7 @@
+// @fail
+// @error: duplicate field name
+
+class Bad {
+    let a: int;
+    let a: bool;
+}

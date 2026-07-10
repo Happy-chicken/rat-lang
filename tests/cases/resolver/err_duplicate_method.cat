@@ -1,0 +1,7 @@
+// @fail
+// @error: duplicate method name
+
+trait Bad {
+    decl m() -> int;
+    decl m() -> float;
+}

@@ -1,0 +1,10 @@
+// @fail
+// @error: not all control paths return a value
+
+def pick(flag: bool) -> int {
+    if flag {
+        return 1;
+    } else {
+        let x: int = 0;
+    }
+}

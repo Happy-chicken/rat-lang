@@ -1,0 +1,7 @@
+// @pass
+// uninitialized list declaration — starts empty
+
+def main() {
+    let xs: list<int>;
+    return;
+}

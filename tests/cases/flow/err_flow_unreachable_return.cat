@@ -1,0 +1,8 @@
+// @pass
+// @warning: unreachable statement
+// unreachable code is a warning, not an error in void functions
+
+def run() {
+    return;
+    let x: int = 1;
+}

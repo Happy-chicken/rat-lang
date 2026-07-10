@@ -1,0 +1,12 @@
+// @fail
+// @error: class `Point` has no field `z`
+
+class Point {
+    let x: int;
+    let y: int;
+}
+
+def main() -> int {
+    let p: Point;
+    return p.z;
+}

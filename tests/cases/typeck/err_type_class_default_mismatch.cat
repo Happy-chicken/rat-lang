@@ -1,0 +1,6 @@
+// @fail
+// @error: default type mismatch
+
+class Bad {
+    let x: int = true;
+}

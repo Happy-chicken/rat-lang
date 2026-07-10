@@ -1,0 +1,7 @@
+// @fail
+// @error: continue statement outside of loop
+
+def main() {
+    continue;
+    return;
+}

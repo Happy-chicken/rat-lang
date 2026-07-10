@@ -1,0 +1,10 @@
+// @pass
+// if branches return compatible types, void function
+
+def abs(x: int) {
+    if x < 0 {
+        return;
+    } else {
+        return;
+    }
+}

@@ -1,0 +1,7 @@
+// @fail
+// @error: negation requires numeric type
+
+def main() {
+    let x = -true;
+    return;
+}

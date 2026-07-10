@@ -1,0 +1,8 @@
+// @pass
+// calling declared function, passing correct argument types
+
+decl add(a: int, b: int) -> int;
+
+def main() -> int {
+    return add(1, 2);
+}

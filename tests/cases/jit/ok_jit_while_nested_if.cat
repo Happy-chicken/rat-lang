@@ -1,0 +1,14 @@
+// @pass
+// @jit: 5
+
+def main() -> int {
+    let i = 10;
+    let count = 0;
+    while i > 0 {
+        i = i - 1;
+        if count < 5 {
+            count = count + 1;
+        }
+    }
+    return count;
+}

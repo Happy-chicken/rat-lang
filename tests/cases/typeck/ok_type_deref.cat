@@ -1,0 +1,8 @@
+// @pass
+// dereference a pointer returns the inner type
+
+def main() -> int {
+    let x: int = 42;
+    let p = &x;
+    return *p;
+}

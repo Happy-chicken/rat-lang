@@ -1,0 +1,10 @@
+// @pass
+// @jit: 10
+
+def main() -> int {
+    let x = 5;
+    if x > 3 {
+        return 10;
+    }
+    return 0;
+}

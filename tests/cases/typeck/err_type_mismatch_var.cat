@@ -1,0 +1,7 @@
+// @fail
+// @error: type mismatch
+
+def main() -> int {
+    let x: int = true;
+    return x;
+}
