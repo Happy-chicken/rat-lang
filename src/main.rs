@@ -14,9 +14,11 @@ use midend::ir_emitter::IrEmitter;
 
 fn main() {
     let src = r#"
-def main()->str {
-    let l: list<str> = ["a", "b", "c"];
-    return l[1];
+def main()->char {
+    let s: str = "ahello";
+    let c: char = s[1];
+    let l: list<list<char>> = [['a', 'b'], ['c', 'd']];
+    return c;
 }
     "#;
     let file = SourceFile::new("main.rat".to_string(), src.to_string());

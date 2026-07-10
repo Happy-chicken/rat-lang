@@ -862,6 +862,19 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
 
         let obj_val = self.compile_expr(object);
         let idx_val = self.compile_expr(index);
+        let idx_int = idx_val.into_int_value();
+
+        if obj_val.is_pointer_value() {
+            let i8_ty: BasicTypeEnum = self.context.i8_type().into();
+            let elem_ptr = unsafe {
+                self.builder.build_gep(i8_ty, obj_val.into_pointer_value(), &[idx_int.into()], "str.idx")
+                    .unwrap_or(obj_val.into_pointer_value())
+            };
+            return match self.builder.build_load(i8_ty, elem_ptr, "str.char") {
+                Ok(v) => v,
+                Err(_) => zero,
+            };
+        }
 
         let obj_struct_val = obj_val.into_struct_value();
 
@@ -889,8 +902,6 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
                 return zero;
             }
         };
-
-        let idx_int = idx_val.into_int_value();
 
         self.emit_bounds_check(idx_int, len_val, span);
 
