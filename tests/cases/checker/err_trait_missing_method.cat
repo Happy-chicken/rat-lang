@@ -1,0 +1,17 @@
+// @fail
+// @error: requires method
+
+trait Drawable {
+    decl draw() -> none;
+    decl size() -> int;
+}
+
+class Circle {
+    let r: int = 1;
+}
+
+impl Drawable for Circle {
+    def draw() {
+        return;
+    }
+}

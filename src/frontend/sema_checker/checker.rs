@@ -73,7 +73,21 @@ impl SemaChecker {
         }
 
         if let Some(trait_name) = &imp.trait_name {
-            if ctx.symbol_table.resolve_global(trait_name).is_none() {
+            if let Some(sym) = ctx.symbol_table.resolve_global(trait_name) {
+                let s = sym.borrow();
+                if let SymbolKind::Trait { methods } = &s.kind {
+                    for required in methods {
+                        let found = imp.methods.iter().any(|m| &m.function_header.name == required);
+                        if !found {
+                            let err = diag.error(span, format!(
+                                "trait `{}` requires method `{}` but it is not implemented",
+                                trait_name, required
+                            )).build();
+                            diag.emit(err);
+                        }
+                    }
+                }
+            } else {
                 let err = diag
                     .error(span, format!("trait `{}` not found", trait_name))
                     .build();

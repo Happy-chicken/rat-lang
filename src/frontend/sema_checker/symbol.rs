@@ -27,7 +27,9 @@ pub enum SymbolKind {
     Class {
         fields: HashMap<String, Type>,
     },
-    Trait,
+    Trait {
+        methods: Vec<String>,
+    },
 }
 
 impl Symbol {
@@ -59,8 +61,8 @@ impl Symbol {
         Symbol { kind, name: name.into(), ty: None, scope_depth: 0, span }
     }
 
-    pub fn new_trait(name: impl Into<String>, span: Span) -> Self {
-        let kind = SymbolKind::Trait;
+    pub fn new_trait(name: impl Into<String>, methods: Vec<String>, span: Span) -> Self {
+        let kind = SymbolKind::Trait { methods };
         Symbol { kind, name: name.into(), ty: None, scope_depth: 0, span }
     }
 
@@ -87,7 +89,7 @@ impl Symbol {
             SymbolKind::Type => "type",
             SymbolKind::Parameter { .. } => "parameter",
             SymbolKind::Class { .. } => "class",
-            SymbolKind::Trait => "trait",
+            SymbolKind::Trait { .. } => "trait",
         }
     }
 

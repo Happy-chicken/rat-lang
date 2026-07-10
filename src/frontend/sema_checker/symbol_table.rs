@@ -84,7 +84,7 @@ impl SymbolTable {
                     SymbolKind::Class { fields } => {
                         format!("class ({} fields)", fields.len())
                     }
-                    SymbolKind::Trait => "trait".to_string(),
+                    SymbolKind::Trait { .. } => "trait".to_string(),
                 };
                 println!("  {} : {} @ depth={}", name, kind_str, sym.scope_depth);
             }

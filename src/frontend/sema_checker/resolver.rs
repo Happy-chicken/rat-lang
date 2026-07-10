@@ -152,7 +152,8 @@ impl Resolver {
                     diag.emit(err);
                 }
             }
-            let symbol = Symbol::new_trait(name.clone(), item_node.span);
+            let method_names: Vec<String> = methods.iter().map(|m| m.name.clone()).collect();
+            let symbol = Symbol::new_trait(name.clone(), method_names, item_node.span);
             self.declare_top_level(symbol, ctx, diag);
         }
     }

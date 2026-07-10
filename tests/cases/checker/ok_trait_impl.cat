@@ -1,0 +1,21 @@
+// @pass
+// trait implementation — all methods present
+
+trait Drawable {
+    decl draw() -> none;
+}
+
+class Circle {
+    let r: int = 1;
+}
+
+impl Drawable for Circle {
+    def draw(self: Circle) {
+        return self.r + 1;
+    }
+}
+
+def main() {
+    let c = Circle(1);
+    return c.draw();
+}
