@@ -280,11 +280,18 @@ impl TypeInferer {
         diag: &mut DiagCtxt,
     ) -> Type {
         if let Expr::Member { object, field } = &callee.expr {
-            if let Some(sym) = ctx.symbol_table.resolve(field) {
+            let obj_ty = self.infer_expr(&object.expr, object.span, ctx, diag);
+            let resolved_obj = ctx.type_ctx.resolve_type(&obj_ty);
+
+            let mangled = if let Type::Class(ref class_name) = resolved_obj {
+                format!("{}_{}", class_name, field)
+            } else {
+                field.clone()
+            };
+
+            if let Some(sym) = ctx.symbol_table.resolve(&mangled) {
                 let s = sym.borrow();
                 if let SymbolKind::Function { params, return_type } = &s.kind {
-                    let obj_ty = self.infer_expr(&object.expr, object.span, ctx, diag);
-
                     let mut arg_types: Vec<Type> = vec![obj_ty];
                     for a in args {
                         arg_types.push(self.infer_expr(&a.expr, a.span, ctx, diag));

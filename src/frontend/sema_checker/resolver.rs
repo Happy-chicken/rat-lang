@@ -276,8 +276,9 @@ impl Resolver {
             }
 
             let param_types: Vec<Type> = header.params.iter().map(|p| p.ty.clone()).collect();
-            let ret_ty = header.return_type.clone().unwrap_or(Type::Void);
-            let symbol = Symbol::new_function(header.name.clone(), param_types, ret_ty, span);
+            let _ret_ty = header.return_type.clone().unwrap_or(Type::Void);
+            let mangled = format!("{}_{}", imp.class_name, header.name);
+            let symbol = Symbol::new_function(mangled, param_types, _ret_ty, span);
             self.declare_top_level(symbol, ctx, diag);
         }
     }

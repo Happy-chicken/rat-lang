@@ -1,0 +1,42 @@
+// @pass
+// @jit: 322
+// Integration: classes, methods, lists, fib, ptr
+
+class Rect {
+    let w: int = 0;
+    let h: int = 0;
+}
+
+impl Rect {
+    def area(self: Rect) -> int {
+        return self.w * self.h;
+    }
+}
+
+def fib(n: int) -> int {
+    if n < 2 {
+        return n;
+    }
+    return fib(n - 1) + fib(n - 2);
+}
+
+def main() -> int {
+    let r: Rect = Rect(10, 20);
+    let a: int = r.area();
+
+    let nums: list<int> = [1, 2, 3, 4, 5];
+    let s: int = 0;
+    let i: int = 0;
+    while i < 5 {
+        s = s + nums[i];
+        i = i + 1;
+    }
+
+    let f: int = fib(6);
+
+    let x: int = 99;
+    let p: ptr<int> = &x;
+    let v: int = *p;
+
+    return a + s + f + v;
+}

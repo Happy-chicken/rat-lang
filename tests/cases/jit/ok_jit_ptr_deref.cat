@@ -1,0 +1,8 @@
+// @pass
+// @jit: 99
+
+def main() -> int {
+    let x: int = 99;
+    let p: ptr<int> = &x;
+    return *p;
+}
