@@ -1,8 +1,11 @@
 // @pass
-// @jit: 99
-
+// @jit: 10
+def func(a: ptr<int>) {
+    *a = 10;
+}
 def main() -> int {
     let x: int = 99;
     let p: ptr<int> = &x;
-    return *p;
+    func(p);
+    return x;
 }
