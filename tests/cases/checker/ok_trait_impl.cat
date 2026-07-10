@@ -2,7 +2,7 @@
 // trait implementation — all methods present
 
 trait Drawable {
-    decl draw() -> none;
+    decl draw() -> int;
 }
 
 class Circle {
@@ -10,12 +10,12 @@ class Circle {
 }
 
 impl Drawable for Circle {
-    def draw(self: Circle) {
-        return self.r + 1;
+    def draw(self: Circle) -> int {
+        return self.r;
     }
 }
 
-def main() {
-    let c = Circle(1);
+def main()->int {
+    let c = Circle(5);
     return c.draw();
 }

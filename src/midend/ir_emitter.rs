@@ -14,7 +14,7 @@ use crate::frontend::ast::Program;
 use crate::frontend::ast::{expr::*, item::*, stmt::*, typ::Type as AstType};
 use crate::frontend::sema_checker::sema_ctx::SemaCtxt;
 
-use super::env::{ClassInfo, Env, VarInfo};
+use super::env::{ClassInfo, Env, VarInfo, ListTypeRegistry};
 
 pub struct IrEmitter<'a, 'ctx> {
     context: &'ctx Context,
@@ -24,6 +24,7 @@ pub struct IrEmitter<'a, 'ctx> {
     diag: &'a mut DiagCtxt,
     current_function: Option<inkwell::values::FunctionValue<'ctx>>,
     class_info: HashMap<String, ClassInfo<'ctx>>,
+    list_types: ListTypeRegistry<'ctx>,
 }
 
 impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
@@ -38,6 +39,7 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
             diag,
             current_function: None,
             class_info: HashMap::new(),
+            list_types: ListTypeRegistry::new(),
         }
     }
 
@@ -125,11 +127,12 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
         self.class_info.get(name).map(|c| c.struct_ty)
     }
 
-    fn get_list_struct_type(&self, _elem_ty: BasicTypeEnum<'ctx>) -> StructType<'ctx> {
-        let i64 = self.context.i64_type();
-        let ptr_ty = self.context.ptr_type(AddressSpace::default());
-        self.context
-            .struct_type(&[i64.into(), i64.into(), ptr_ty.into()], false)
+    fn get_list_struct_type(&self, elem_ty: BasicTypeEnum<'ctx>) -> StructType<'ctx> {
+        self.list_types.make(self.context, elem_ty)
+    }
+
+    fn get_list_elem(&self, st: StructType<'ctx>) -> BasicTypeEnum<'ctx> {
+        self.list_types.elem_type(st)
     }
 
     fn compile_global_var(&mut self, global: &GlobalVar, span: Span) {
@@ -628,6 +631,7 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
         let array_ty = match elem_llvm_ty {
             BasicTypeEnum::IntType(t) => t.array_type(elements.len() as u32),
             BasicTypeEnum::FloatType(t) => t.array_type(elements.len() as u32),
+            BasicTypeEnum::StructType(t) => t.array_type(elements.len() as u32),
             _ => self.context.i64_type().array_type(elements.len() as u32),
         };
         let array_alloca = match self.builder.build_alloca(array_ty, "list.buf") {
@@ -888,7 +892,7 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
 
         self.emit_bounds_check(idx_int, len_val, span);
 
-        let elem_llvm_ty: BasicTypeEnum = self.context.i64_type().into();
+        let elem_llvm_ty: BasicTypeEnum = self.get_list_elem(list_struct);
 
         let elem_ptr = unsafe {
             self.builder
@@ -1049,7 +1053,8 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
             let idx_int = idx_val.into_int_value();
             self.emit_bounds_check(idx_int, len_val, span);
 
-            let elem_llvm_ty: BasicTypeEnum = self.context.i64_type().into();
+            let list_struct = obj_struct_val.get_type();
+            let elem_llvm_ty: BasicTypeEnum = self.get_list_elem(list_struct);
             unsafe {
                 self.builder
                     .build_gep(elem_llvm_ty, data_val, &[idx_int.into()], "list.assign.ptr")
@@ -1176,6 +1181,14 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
             Expr::Literal(Literal::Int(_)) => self.context.i64_type().into(),
             Expr::Literal(Literal::Float(_)) => self.context.f32_type().into(),
             Expr::Literal(Literal::Bool(_)) => self.context.bool_type().into(),
+            Expr::List { elements } => {
+                let inner = if elements.is_empty() {
+                    self.context.i64_type().into()
+                } else {
+                    self.infer_lit_type(&elements[0].expr)
+                };
+                self.get_list_struct_type(inner).into()
+            }
             _ => self.context.i64_type().into(),
         }
     }

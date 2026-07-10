@@ -1,0 +1,8 @@
+// @pass
+// @jit: 10
+// nested list: xs[0][1]
+
+def main() -> int {
+    let xs: list<int> = [10, 20, 30];
+    return xs[1] - xs[0];
+}
