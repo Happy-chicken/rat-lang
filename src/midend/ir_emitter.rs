@@ -67,6 +67,11 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
         self.module.print_to_stderr();
     }
 
+    pub fn optimize_llvm(&self) -> Result<bool, String> {
+        crate::midend::optimizer::init_native_target();
+        crate::midend::optimizer::run_llvm_optimizations(&self.module, "default<O2>")
+    }
+
     pub fn module(&self) -> &Module<'ctx> {
         &self.module
     }
@@ -1100,6 +1105,13 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
                 let ptr = self.compile_member_ptr(target, span);
                 let val = self.compile_expr(value);
                 let _ = self.builder.build_store(ptr, val);
+                val
+            }
+
+            Expr::Unary { op: UnaryOp::Deref, expr: inner } => {
+                let ptr_val = self.compile_expr(inner).into_pointer_value();
+                let val = self.compile_expr(value);
+                let _ = self.builder.build_store(ptr_val, val);
                 val
             }
 

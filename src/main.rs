@@ -10,75 +10,19 @@ use frontend::lexer::Lexer;
 use frontend::parser::Parser;
 use frontend::sema_checker::AnalysisPipeline;
 use inkwell::context::Context;
+use midend::dataflow;
 use midend::ir_emitter::IrEmitter;
 
 fn main() {
     let src = r#"
-class Circle {
-    let name: str = "c";
-    let r: int = 0;
-    
+def func(a: ptr<int>) {
+    *a = 10;
 }
-
-class Rect {
-    let name: str = "s";
-    let w: int = 0;
-    let h: int = 0;   
-}
-
-trait Computable {
-    decl area(factor: int) -> int;
-    decl say() -> str;
-}
-
-impl Computable for Rect {
-    def area(self: Rect, factor: int) -> int {
-        return self.w * self.h * factor;
-    }
-
-    def say(self: Rect) -> str {
-        return self.name;
-    }
-}
-
-impl Computable for Circle {
-    def area(self: Circle, factor: int) -> int {
-        return self.r * self.r * factor;
-    }
-
-    def say(self: Circle) -> str {
-        return self.name;
-    }
-}
-
-def fib(n: int) -> int {
-    if n < 2 {
-        return n;
-    }
-    return fib(n - 1) + fib(n - 2);
-}
-
 def main() -> int {
-    let r: Rect = Rect("aa", 10, 20);
-    let a1: int = r.area(1);
-    let c: Circle = Circle("bb", 10);
-    let a2: int = c.area(3);
-
-    let nums: list<int> = [1, 2, 3, 4, 5];
-    let s: int = 0;
-    let i: int = 0;
-    while i < 5 {
-        s = s + nums[i];
-        i = i + 1;
-    }
-
-    let f: int = fib(6);
-
     let x: int = 99;
     let p: ptr<int> = &x;
-    let v: int = *p;
-
-    return a1 + a2 + s + f + v;
+    func(p);
+    return x;
 }
     "#;
     let file = SourceFile::new("main.rat".to_string(), src.to_string());
@@ -96,7 +40,7 @@ def main() -> int {
     let mut analysis_pipeline = AnalysisPipeline::standard();
     let sema_ctx = analysis_pipeline.run(&ast, &mut diag_ctxt);
     sema_ctx.symbol_table.dump();
-    diag_ctxt.print_all(&mut std::io::stdout()).expect("");
+    
 
     println!("\n=== LLVM IR ===");
     let context = Context::create();
@@ -105,6 +49,25 @@ def main() -> int {
     emitter.dump_module();
 
     if !emitter.has_errors() {
+        println!("\n=== Dataflow Analysis (Live Variables) ===");
+        let cfgs = dataflow::build_cfg(&ast);
+        for (fn_name, cfg) in &cfgs {
+            let live = dataflow::compute_live_variables(cfg);
+            println!(
+                "fn {}: def={:?} use={:?} live_in={:?}",
+                fn_name, cfg.blocks[0].def, cfg.blocks[0].r#use, live[0]
+            );
+        }
+
+        println!("\n=== LLVM Optimization ===");
+        match emitter.optimize_llvm() {
+            Ok(true) => println!("LLVM passes applied successfully"),
+            Ok(false) => println!("LLVM passes completed (no changes)"),
+            Err(e) => println!("LLVM optimization failed: {}", e),
+        }
+        println!("=== Optimized LLVM IR ===");
+        emitter.dump_module();
+
         match JitRunner::new(emitter.module()) {
             Ok(runner) => unsafe {
                 match runner.call_main() {
@@ -115,4 +78,5 @@ def main() -> int {
             Err(e) => eprintln!("JIT init failed: {}", e),
         }
     }
+    diag_ctxt.print_all(&mut std::io::stdout()).expect("");
 }
