@@ -7,7 +7,7 @@ use inkwell::module::Module;
 use inkwell::types::{BasicType, BasicTypeEnum, StructType};
 use inkwell::values::{BasicValue, BasicValueEnum, IntValue, PointerValue};
 use std::collections::HashMap;
-
+use std::cell::Cell;
 use crate::common::DiagCtxt;
 use crate::common::span::Span;
 use crate::frontend::ast::Program;
@@ -25,6 +25,7 @@ pub struct IrEmitter<'a, 'ctx> {
     current_function: Option<inkwell::values::FunctionValue<'ctx>>,
     class_info: HashMap<String, ClassInfo<'ctx>>,
     list_types: ListTypeRegistry<'ctx>,
+    str_counter: Cell<u64>,
 }
 
 impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
@@ -40,6 +41,7 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
             current_function: None,
             class_info: HashMap::new(),
             list_types: ListTypeRegistry::new(),
+            str_counter: Cell::new(0),
         }
     }
 
@@ -320,7 +322,7 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
                                                 "init.field",
                                             )
                                             .unwrap_or(alloca);
-                                        let _ = self.builder.build_store(field_ptr, val);
+                                    let _ = self.builder.build_store(field_ptr, val);
                                     }
                                 }
                             }
@@ -1172,6 +1174,7 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
             Literal::Int(i) => Some(self.context.i64_type().const_int(*i as u64, true).into()),
             Literal::Bool(b) => Some(self.context.bool_type().const_int(*b as u64, false).into()),
             Literal::Float(f) => Some(self.context.f32_type().const_float(*f as f64).into()),
+            Literal::Char(c) => Some(self.context.i8_type().const_int(*c as u64, false).into()),
             _ => None,
         }
     }
@@ -1181,6 +1184,8 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
             Expr::Literal(Literal::Int(_)) => self.context.i64_type().into(),
             Expr::Literal(Literal::Float(_)) => self.context.f32_type().into(),
             Expr::Literal(Literal::Bool(_)) => self.context.bool_type().into(),
+            Expr::Literal(Literal::Char(_)) => self.context.i8_type().into(),
+            Expr::Literal(Literal::StringLiteral(_)) => self.context.ptr_type(AddressSpace::default()).into(),
             Expr::List { elements } => {
                 let inner = if elements.is_empty() {
                     self.context.i64_type().into()
@@ -1198,8 +1203,32 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
             Literal::Int(i) => self.context.i64_type().const_int(*i as u64, true).into(),
             Literal::Float(f) => self.context.f32_type().const_float(*f as f64).into(),
             Literal::Bool(b) => self.context.bool_type().const_int(*b as u64, false).into(),
+            Literal::Char(c) => self.context.i8_type().const_int(*c as u64, false).into(),
+            Literal::StringLiteral(s) => self.emit_string_literal(s),
             _ => self.context.i64_type().const_zero().into(),
         }
+    }
+
+    fn emit_string_literal(&self, s: &str) -> BasicValueEnum<'ctx> {
+        let id = self.str_counter.get();
+        self.str_counter.set(id + 1);
+        let name = format!(".str.{}", id);
+
+        let bytes: Vec<u8> = s.bytes().chain(std::iter::once(0)).collect();
+        let ty = self.context.i8_type().array_type(bytes.len() as u32);
+        let global = self.module.add_global(ty, Some(AddressSpace::default()), &name);
+        global.set_initializer(&self.context.i8_type().const_array(
+            &bytes.iter().map(|&b| self.context.i8_type().const_int(b as u64, false)).collect::<Vec<_>>(),
+        ));
+
+        let ptr = unsafe {
+            self.builder.build_gep(
+                ty, global.as_pointer_value(),
+                &[self.context.i64_type().const_zero().into(), self.context.i64_type().const_zero().into()],
+                &format!("{}.ptr", name),
+            ).unwrap_or(global.as_pointer_value())
+        };
+        ptr.into()
     }
 
     fn compile_binary(
@@ -1281,6 +1310,7 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
             AstType::Float => self.context.f32_type().into(),
             AstType::Bool => self.context.bool_type().into(),
             AstType::Char => self.context.i8_type().into(),
+            AstType::Str => self.context.ptr_type(AddressSpace::default()).into(),
             AstType::Void => self.context.i64_type().into(),
             AstType::Ptr(_inner) => self.context.ptr_type(AddressSpace::default()).into(),
             AstType::List(inner) => {

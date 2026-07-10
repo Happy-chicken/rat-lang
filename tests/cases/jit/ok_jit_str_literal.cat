@@ -1,0 +1,8 @@
+// @pass
+// @jit: 0
+// string literal pointer works (we return 0 since str can't be compared easily)
+
+def main() -> int {
+    let s: str = "hello";
+    return 0;
+}

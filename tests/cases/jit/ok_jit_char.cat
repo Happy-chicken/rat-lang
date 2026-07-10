@@ -1,0 +1,8 @@
+// @pass
+// @jit: 1
+// char literal works
+
+def main() -> int {
+    let c: char = 'A';
+    return 1;
+}
