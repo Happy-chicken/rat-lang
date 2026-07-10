@@ -1,6 +1,6 @@
 use crate::common::span::Span;
 use crate::frontend::ast::typ::Type;
-use std::collections::HashMap;
+
 #[derive(Debug, Clone)]
 pub struct Symbol {
     pub kind: SymbolKind,
@@ -25,8 +25,7 @@ pub enum SymbolKind {
         is_ref: bool,
     },
     Class {
-        fields: HashMap<String, Type>,
-        field_order: Vec<Type>,
+        fields: Vec<(String, Type)>,
     },
     Trait {
         methods: Vec<String>,
@@ -57,8 +56,8 @@ impl Symbol {
         Symbol { kind, name: name.into(), ty: None, scope_depth: 0, span }
     }
 
-    pub fn new_class(name: impl Into<String>, fields: HashMap<String, Type>, field_order: Vec<Type>, span: Span) -> Self {
-        let kind = SymbolKind::Class { fields, field_order };
+    pub fn new_class(name: impl Into<String>, fields: Vec<(String, Type)>, span: Span) -> Self {
+        let kind = SymbolKind::Class { fields };
         Symbol { kind, name: name.into(), ty: None, scope_depth: 0, span }
     }
 

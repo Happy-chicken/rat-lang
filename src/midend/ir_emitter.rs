@@ -47,6 +47,7 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
 
     pub fn generate(&mut self, program: &Program, sema_ctx: &SemaCtxt) {
         self.build_class_types(program, sema_ctx);
+        self.build_class_constructors();
         for item_node in &program.items {
             let span = item_node.span;
             match &item_node.item {
@@ -119,6 +120,59 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
                 }
             }
         }
+    }
+
+    fn build_class_constructors(&mut self) {
+        let class_data: Vec<(String, StructType<'ctx>, Vec<BasicTypeEnum<'ctx>>)> =
+            self.class_info
+                .iter()
+                .map(|(name, info)| (name.clone(), info.struct_ty, info.field_types.clone()))
+                .collect();
+
+        for (name, struct_ty, field_tys) in class_data {
+            self.compile_class_constructor(&name, struct_ty, &field_tys);
+        }
+    }
+
+    fn compile_class_constructor(
+        &mut self,
+        class_name: &str,
+        struct_ty: StructType<'ctx>,
+        field_tys: &[BasicTypeEnum<'ctx>],
+    ) {
+        let mangled = format!("{}_new", class_name);
+
+        let param_meta: Vec<_> = field_tys.iter().map(|t| (*t).into()).collect();
+        let fn_type = struct_ty.fn_type(&param_meta, false);
+
+        let function = self.module.add_function(&mangled, fn_type, None);
+        let saved_fn = self.current_function;
+        self.current_function = Some(function);
+        let entry = self.context.append_basic_block(function, "entry");
+        self.builder.position_at_end(entry);
+
+        let alloca = self
+            .builder
+            .build_alloca(struct_ty, "ctor.tmp")
+            .unwrap();
+
+        for (i, _) in field_tys.iter().enumerate() {
+            if let Some(param) = function.get_nth_param(i as u32) {
+                let field_ptr = self
+                    .builder
+                    .build_struct_gep(struct_ty, alloca, i as u32, "ctor.field")
+                    .unwrap_or(alloca);
+                let _ = self.builder.build_store(field_ptr, param);
+            }
+        }
+
+        let loaded = self
+            .builder
+            .build_load(struct_ty, alloca, "ctor.load")
+            .unwrap();
+        let _ = self.builder.build_return(Some(&loaded));
+
+        self.current_function = saved_fn;
     }
 
     fn get_class_info(&self, name: &str) -> Option<&ClassInfo<'ctx>> {
@@ -481,45 +535,63 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
                         }
                         None => {
                             if let Some(info) = self.class_info.get(name) {
-                                let class_st = info.struct_ty;
                                 let defaults = info.field_defaults.clone();
-                                let alloca = match self
-                                    .builder
-                                    .build_alloca(class_st, &format!("ctor.{}", name))
-                                {
-                                    Ok(a) => a,
-                                    Err(_) => return zero,
-                                };
                                 let total_fields = defaults.len();
 
-                                for i in 0..total_fields {
-                                    let val = if i < args.len() {
-                                        self.compile_expr(&args[i])
-                                    } else {
-                                        let default_val = defaults.get(i).and_then(|o| o.as_ref());
-                                        if let Some(default_expr) = default_val {
-                                            self.compile_expr(default_expr)
+                                let new_name = format!("{}_new", name);
+                                if let Some(function) = self.module.get_function(&new_name) {
+                                    let mut arg_vals: Vec<BasicValueEnum> = Vec::new();
+                                    for i in 0..total_fields {
+                                        let val = if i < args.len() {
+                                            self.compile_expr(&args[i])
                                         } else {
-                                            self.context.i64_type().const_zero().into()
+                                            let default_val =
+                                                defaults.get(i).and_then(|o| o.as_ref());
+                                            if let Some(default_expr) = default_val {
+                                                self.compile_expr(default_expr)
+                                            } else {
+                                                self.context.i64_type().const_zero().into()
+                                            }
+                                        };
+                                        arg_vals.push(val);
+                                    }
+                                    let arg_refs: Vec<_> =
+                                        arg_vals.iter().map(|v| (*v).into()).collect();
+                                    match self.builder.build_call(function, &arg_refs, "ctor") {
+                                        Ok(call) => {
+                                            call.try_as_basic_value().basic().unwrap_or(zero)
                                         }
-                                    };
-                                    let field_ptr = self
-                                        .builder
-                                        .build_struct_gep(class_st, alloca, i as u32, "ctor.field")
-                                        .unwrap_or(alloca);
-                                    let _ = self.builder.build_store(field_ptr, val);
+                                        Err(e) => {
+                                            let d = self
+                                                .diag
+                                                .error(
+                                                    span,
+                                                    format!("ctor call failed: {}", e),
+                                                )
+                                                .build();
+                                            self.diag.emit(d);
+                                            zero
+                                        }
+                                    }
+                                } else {
+                                    let d = self
+                                        .diag
+                                        .error(
+                                            span,
+                                            format!("undefined function: {}", name),
+                                        )
+                                        .build();
+                                    self.diag.emit(d);
+                                    zero
                                 }
-                                match self.builder.build_load(class_st, alloca, "ctor.load") {
-                                    Ok(v) => return v.into(),
-                                    Err(_) => return zero,
-                                }
+                            } else {
+                                let d = self
+                                    .diag
+                                    .error(span, format!("undefined function: {}", name))
+                                    .build();
+                                self.diag.emit(d);
+                                zero
                             }
-                            let d = self
-                                .diag
-                                .error(span, format!("undefined function: {}", name))
-                                .build();
-                            self.diag.emit(d);
-                            zero
                         }
                     }
                 } else {

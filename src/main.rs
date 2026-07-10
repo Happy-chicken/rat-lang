@@ -59,9 +59,9 @@ def fib(n: int) -> int {
 }
 
 def main() -> int {
-    let r: Rect = Rect(10, 20);
+    let r: Rect = Rect("aa", 10, 20);
     let a1: int = r.area(1);
-    let c: Circle = Circle(10);
+    let c: Circle = Circle("bb", 10);
     let a2: int = c.area(3);
 
     let nums: list<int> = [1, 2, 3, 4, 5];

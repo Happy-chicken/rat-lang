@@ -107,12 +107,11 @@ impl Resolver {
                         .build();
                     diag.emit(err);
                 }
-                let field_types: HashMap<String, Type> = fields
+                let fields_sym: Vec<(String, Type)> = fields
                     .iter()
                     .map(|f| (f.name.clone(), f.ty.clone()))
                     .collect();
-                let field_order: Vec<Type> = fields.iter().map(|f| f.ty.clone()).collect();
-                Symbol::new_class(name.clone(), field_types, field_order, item_node.span)
+                Symbol::new_class(name.clone(), fields_sym, item_node.span)
             }
             _ => return,
         };

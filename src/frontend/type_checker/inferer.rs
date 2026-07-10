@@ -369,7 +369,7 @@ impl TypeInferer {
             Type::Class(name) => {
                 if let Some(sym) = ctx.symbol_table.resolve_global(&name) {
                     let s = sym.borrow();
-                    if let SymbolKind::Class { fields, field_order } = &s.kind {
+                    if let SymbolKind::Class { fields } = &s.kind {
                         if args.len() > fields.len() {
                             let err = diag.error(span, format!(
                                 "class `{}` has {} fields but got {} arguments",
@@ -379,8 +379,8 @@ impl TypeInferer {
                             return Type::Error;
                         }
                         for (i, arg_type) in arg_types.iter().enumerate() {
-                            if i < field_order.len() {
-                                let field_ty = ast_type_to_tc(&field_order[i]);
+                            if i < fields.len() {
+                                let field_ty = ast_type_to_tc(&fields[i].1);
                                 let mut unifier = Unifier::new(&mut ctx.type_ctx);
                                 if let Err(UnifyError::Mismatch { expected, found }) =
                                     unifier.unify(arg_type, &field_ty)
@@ -426,9 +426,9 @@ impl TypeInferer {
                     let s = sym.borrow();
                     match &s.kind {
                         crate::frontend::sema_checker::symbol::SymbolKind::Class {
-                            fields, ..
+                            fields,
                         } => {
-                            if let Some(field_ty) = fields.get(field) {
+                            if let Some(field_ty) = fields.iter().find(|(n, _)| n == field).map(|(_, t)| t) {
                                 ast_type_to_tc(field_ty)
                             } else if ctx.symbol_table.resolve_global(field).is_some() {
                                 ctx.type_ctx.fresh_type_var()
