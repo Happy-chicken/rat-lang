@@ -1,0 +1,17 @@
+// @pass
+// @jit: 5
+
+class Calc {
+    let x: int = 5;
+}
+
+impl Calc {
+    def get_x() -> int {
+        return 0;
+    }
+}
+
+def main() -> int {
+    let c: Calc;
+    return c.x;
+}

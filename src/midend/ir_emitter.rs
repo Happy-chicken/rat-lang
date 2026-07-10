@@ -50,7 +50,7 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
                 Item::FunctionDef(func) => self.compile_function(func, span),
                 Item::Impl(imp) => {
                     for method in &imp.methods {
-                        self.compile_function(method, span);
+                        self.compile_method(&imp.class_name, method, span);
                     }
                 }
                 _ => {}
@@ -101,8 +101,18 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
                         field_indices,
                         field_types: field_tys,
                         field_defaults,
+                        methods: HashMap::new(),
                     },
                 );
+            }
+            else if let Item::Impl(imp) = &item_node.item {
+                let prefix = format!("{}_", imp.class_name);
+                for method in &imp.methods {
+                    let mangled = format!("{}{}", prefix, method.function_header.name);
+                    if let Some(info) = self.class_info.get_mut(&imp.class_name) {
+                        info.methods.insert(method.function_header.name.clone(), mangled);
+                    }
+                }
             }
         }
     }
@@ -166,7 +176,16 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
         );
     }
 
+    fn compile_method(&mut self, class_name: &str, func: &FunctionDef, span: Span) {
+        let mangled = format!("{}_{}", class_name, func.function_header.name);
+        self.compile_function_named(func, &mangled, span);
+    }
+
     fn compile_function(&mut self, func: &FunctionDef, span: Span) {
+        self.compile_function_named(func, &func.function_header.name, span);
+    }
+
+    fn compile_function_named(&mut self, func: &FunctionDef, name: &str, span: Span) {
         self.enter_scope();
 
         let ret_ast_ty = func
@@ -194,7 +213,7 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
 
         let function = self
             .module
-            .add_function(&func.function_header.name, fn_type, None);
+            .add_function(name, fn_type, None);
         self.current_function = Some(function);
         let entry = self.context.append_basic_block(function, "entry");
         self.builder.position_at_end(entry);
@@ -405,7 +424,8 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
             }
             Expr::Call { callee, args } => {
                 if let Expr::Member { object, field } = &callee.expr {
-                    match self.module.get_function(field) {
+                    let mangled = self.resolve_method(object, field);
+                    match self.module.get_function(&mangled) {
                         Some(function) => {
                             let mut arg_vals: Vec<BasicValueEnum> = vec![self.compile_expr(object)];
                             for arg in args {
@@ -1099,6 +1119,15 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
             }
         }
         None
+    }
+
+    fn resolve_method(&self, _object: &ExprNode, method: &str) -> String {
+        for (_, info) in &self.class_info {
+            if let Some(mangled) = info.methods.get(method) {
+                return mangled.clone();
+            }
+        }
+        method.to_string()
     }
 
     fn get_object_ptr(&self, expr_node: &ExprNode, _span: Span) -> PointerValue<'ctx> {

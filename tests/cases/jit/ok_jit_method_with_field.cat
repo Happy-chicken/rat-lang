@@ -1,0 +1,17 @@
+// @pass
+// @jit: 7
+
+class Adder {
+    let base: int = 3;
+}
+
+impl Adder {
+    def add(a: int) -> int {
+        return 0;
+    }
+}
+
+def main() -> int {
+    let a: Adder;
+    return a.base + 4;
+}
