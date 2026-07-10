@@ -1,0 +1,12 @@
+// @fail
+// @error: type mismatch
+
+class Rect {
+    let name: str = "s";
+    let w: int = 0;
+}
+
+def main() -> int {
+    let r: Rect = Rect(10, 20);
+    return 0;
+}

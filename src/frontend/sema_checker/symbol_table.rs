@@ -81,7 +81,7 @@ impl SymbolTable {
                     SymbolKind::Parameter { is_ref } => {
                         format!("parameter (ref={})", is_ref)
                     }
-                    SymbolKind::Class { fields } => {
+                    SymbolKind::Class { fields, .. } => {
                         format!("class ({} fields)", fields.len())
                     }
                     SymbolKind::Trait { .. } => "trait".to_string(),

@@ -111,7 +111,8 @@ impl Resolver {
                     .iter()
                     .map(|f| (f.name.clone(), f.ty.clone()))
                     .collect();
-                Symbol::new_class(name.clone(), field_types, item_node.span)
+                let field_order: Vec<Type> = fields.iter().map(|f| f.ty.clone()).collect();
+                Symbol::new_class(name.clone(), field_types, field_order, item_node.span)
             }
             _ => return,
         };

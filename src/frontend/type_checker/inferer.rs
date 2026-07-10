@@ -369,7 +369,7 @@ impl TypeInferer {
             Type::Class(name) => {
                 if let Some(sym) = ctx.symbol_table.resolve_global(&name) {
                     let s = sym.borrow();
-                    if let SymbolKind::Class { fields } = &s.kind {
+                    if let SymbolKind::Class { fields, field_order } = &s.kind {
                         if args.len() > fields.len() {
                             let err = diag.error(span, format!(
                                 "class `{}` has {} fields but got {} arguments",
@@ -377,6 +377,21 @@ impl TypeInferer {
                             )).build();
                             diag.emit(err);
                             return Type::Error;
+                        }
+                        for (i, arg_type) in arg_types.iter().enumerate() {
+                            if i < field_order.len() {
+                                let field_ty = ast_type_to_tc(&field_order[i]);
+                                let mut unifier = Unifier::new(&mut ctx.type_ctx);
+                                if let Err(UnifyError::Mismatch { expected, found }) =
+                                    unifier.unify(arg_type, &field_ty)
+                                {
+                                    let err = diag.error(span, format!(
+                                        "constructor arg {} type mismatch: expected {}, found {}",
+                                        i + 1, expected.display_name(), found.display_name()
+                                    )).build();
+                                    diag.emit(err);
+                                }
+                            }
                         }
                     }
                 }
@@ -411,7 +426,7 @@ impl TypeInferer {
                     let s = sym.borrow();
                     match &s.kind {
                         crate::frontend::sema_checker::symbol::SymbolKind::Class {
-                            fields,
+                            fields, ..
                         } => {
                             if let Some(field_ty) = fields.get(field) {
                                 ast_type_to_tc(field_ty)

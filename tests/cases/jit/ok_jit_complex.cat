@@ -1,15 +1,40 @@
 // @pass
-// @jit: 322
+// @jit: 622
 // Integration: classes, methods, lists, fib, ptr
+
+class Circle {
+    let r: int = 0;
+    let name: str = "c";
+}
 
 class Rect {
     let w: int = 0;
     let h: int = 0;
+    let name: str = "s";
 }
 
-impl Rect {
-    def area(self: Rect) -> int {
-        return self.w * self.h;
+trait Computable {
+    decl area(factor: int) -> int;
+    decl say() -> str;
+}
+
+impl Computable for Rect {
+    def area(self: Rect, factor: int) -> int {
+        return self.w * self.h * factor;
+    }
+
+    def say(self: Rect) -> str {
+        return self.name;
+    }
+}
+
+impl Computable for Circle {
+    def area(self: Circle, factor: int) -> int {
+        return self.r * self.r * factor;
+    }
+
+    def say(self: Circle) -> str {
+        return self.name;
     }
 }
 
@@ -22,7 +47,9 @@ def fib(n: int) -> int {
 
 def main() -> int {
     let r: Rect = Rect(10, 20);
-    let a: int = r.area();
+    let a1: int = r.area(1);
+    let c: Circle = Circle(10);
+    let a2: int = c.area(3);
 
     let nums: list<int> = [1, 2, 3, 4, 5];
     let s: int = 0;
@@ -38,5 +65,5 @@ def main() -> int {
     let p: ptr<int> = &x;
     let v: int = *p;
 
-    return a + s + f + v;
+    return a1 + a2 + s + f + v;
 }

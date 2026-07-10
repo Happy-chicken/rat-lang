@@ -26,6 +26,7 @@ pub enum SymbolKind {
     },
     Class {
         fields: HashMap<String, Type>,
+        field_order: Vec<Type>,
     },
     Trait {
         methods: Vec<String>,
@@ -56,8 +57,8 @@ impl Symbol {
         Symbol { kind, name: name.into(), ty: None, scope_depth: 0, span }
     }
 
-    pub fn new_class(name: impl Into<String>, fields: HashMap<String, Type>, span: Span) -> Self {
-        let kind = SymbolKind::Class { fields };
+    pub fn new_class(name: impl Into<String>, fields: HashMap<String, Type>, field_order: Vec<Type>, span: Span) -> Self {
+        let kind = SymbolKind::Class { fields, field_order };
         Symbol { kind, name: name.into(), ty: None, scope_depth: 0, span }
     }
 

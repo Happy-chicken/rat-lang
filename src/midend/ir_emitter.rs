@@ -1140,10 +1140,16 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
         None
     }
 
-    fn resolve_method(&self, _object: &ExprNode, method: &str) -> String {
-        for (_, info) in &self.class_info {
-            if let Some(mangled) = info.methods.get(method) {
-                return mangled.clone();
+    fn resolve_method(&self, object: &ExprNode, method: &str) -> String {
+        if let Expr::Variable(name) = &object.expr {
+            if let Some(info) = self.env.lookup(name) {
+                for (class_name, class_info) in &self.class_info {
+                    if info.ty == class_info.struct_ty.into() {
+                        if let Some(mangled) = class_info.methods.get(method) {
+                            return mangled.clone();
+                        }
+                    }
+                }
             }
         }
         method.to_string()

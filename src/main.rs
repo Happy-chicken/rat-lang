@@ -14,10 +14,71 @@ use midend::ir_emitter::IrEmitter;
 
 fn main() {
     let src = r#"
-def main()->int {
-    let x = 1;
-    let a = &x;
-    return *a;
+class Circle {
+    let name: str = "c";
+    let r: int = 0;
+    
+}
+
+class Rect {
+    let name: str = "s";
+    let w: int = 0;
+    let h: int = 0;   
+}
+
+trait Computable {
+    decl area(factor: int) -> int;
+    decl say() -> str;
+}
+
+impl Computable for Rect {
+    def area(self: Rect, factor: int) -> int {
+        return self.w * self.h * factor;
+    }
+
+    def say(self: Rect) -> str {
+        return self.name;
+    }
+}
+
+impl Computable for Circle {
+    def area(self: Circle, factor: int) -> int {
+        return self.r * self.r * factor;
+    }
+
+    def say(self: Circle) -> str {
+        return self.name;
+    }
+}
+
+def fib(n: int) -> int {
+    if n < 2 {
+        return n;
+    }
+    return fib(n - 1) + fib(n - 2);
+}
+
+def main() -> int {
+    let r: Rect = Rect(10, 20);
+    let a1: int = r.area(1);
+    let c: Circle = Circle(10);
+    let a2: int = c.area(3);
+
+    let nums: list<int> = [1, 2, 3, 4, 5];
+    let s: int = 0;
+    let i: int = 0;
+    while i < 5 {
+        s = s + nums[i];
+        i = i + 1;
+    }
+
+    let f: int = fib(6);
+
+    let x: int = 99;
+    let p: ptr<int> = &x;
+    let v: int = *p;
+
+    return a1 + a2 + s + f + v;
 }
     "#;
     let file = SourceFile::new("main.rat".to_string(), src.to_string());

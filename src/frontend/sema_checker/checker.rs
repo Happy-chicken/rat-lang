@@ -273,7 +273,7 @@ impl SemaChecker {
                                         diag.emit(err);
                                     }
                                 }
-                                SymbolKind::Class { fields } => {
+                                SymbolKind::Class { fields, .. } => {
                                     if args.len() > fields.len() {
                                         let err = diag
                                             .error(
