@@ -220,8 +220,16 @@ impl SemaChecker {
                 self.check_expr(rhs, ctx, diag);
             }
 
-            Expr::Unary { expr, .. } => {
+            Expr::Unary { op, expr } => {
                 self.check_expr(expr, ctx, diag);
+                if let UnaryOp::AddrOf = op {
+                    if !matches!(&expr.expr, Expr::Variable(_) | Expr::Member { .. } | Expr::Index { .. }) {
+                        let err = diag
+                            .error(expr_node.span, "& can only be applied to a variable, field, or index")
+                            .build();
+                        diag.emit(err);
+                    }
+                }
             }
 
             Expr::Call { callee, args } => {

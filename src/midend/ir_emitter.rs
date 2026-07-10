@@ -427,6 +427,7 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
                 let rhs_val = self.compile_expr(rhs);
                 self.compile_binary(op, lhs_val, rhs_val, span)
             }
+            Expr::Unary { op, expr } => self.compile_unary(op, expr, span),
             Expr::Call { callee, args } => {
                 if let Expr::Member { object, field } = &callee.expr {
                     let mangled = self.resolve_method(object, field);
@@ -1205,6 +1206,9 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
                 };
                 self.get_list_struct_type(inner).into()
             }
+            Expr::Unary { op: UnaryOp::AddrOf, .. } => {
+                self.context.ptr_type(AddressSpace::default()).into()
+            }
             _ => self.context.i64_type().into(),
         }
     }
@@ -1313,6 +1317,48 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
             }
         };
         result.into()
+    }
+
+    fn compile_unary(
+        &mut self,
+        op: &UnaryOp,
+        expr: &ExprNode,
+        span: Span,
+    ) -> BasicValueEnum<'ctx> {
+        let zero = self.context.i64_type().const_zero().into();
+        match op {
+            UnaryOp::AddrOf => {
+                if let Expr::Variable(name) = &expr.expr {
+                    if let Some(info) = self.env.lookup(name) {
+                        return info.ptr.into();
+                    }
+                }
+                let d = self.diag.error(span, "& requires a variable").build();
+                self.diag.emit(d);
+                self.context.ptr_type(AddressSpace::default()).const_null().into()
+            }
+            UnaryOp::Deref => {
+                let ptr_val = self.compile_expr(expr).into_pointer_value();
+                let i64_ty: BasicTypeEnum = self.context.i64_type().into();
+                match self.builder.build_load(i64_ty, ptr_val, "deref") {
+                    Ok(v) => v,
+                    Err(_) => zero,
+                }
+            }
+            UnaryOp::Neg => {
+                let val = self.compile_expr(expr).into_int_value();
+                self.builder.build_int_neg(val, "neg").unwrap_or(val).into()
+            }
+            UnaryOp::Not => {
+                let val = self.compile_expr(expr).into_int_value();
+                self.builder.build_not(val, "not").unwrap_or(val).into()
+            }
+            _ => {
+                let d = self.diag.error(span, format!("unsupported unary op: {:?}", op)).build();
+                self.diag.emit(d);
+                zero
+            }
+        }
     }
 
     fn ast_type_to_llvm(&self, ty: &AstType) -> BasicTypeEnum<'ctx> {
