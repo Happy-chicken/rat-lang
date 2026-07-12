@@ -5,12 +5,11 @@ mod midend;
 use backend::jit::JitRunner;
 use common::DiagCtxt;
 use common::location::SourceFile;
-use frontend::ast::printer::AstPrint;
 use frontend::lexer::Lexer;
 use frontend::parser::Parser;
 use frontend::sema_checker::AnalysisPipeline;
 use inkwell::context::Context;
-use midend::dataflow;
+use midend::analyzer::{available_expression, context, live_variable, reaching_definition};
 use midend::ir_emitter::IrEmitter;
 
 fn main() {
@@ -33,14 +32,8 @@ def main() -> int {
     let mut parser = Parser::new(lexer, &mut diag_ctxt);
     let ast = parser.parse_program();
 
-    let mut output = String::new();
-    ast.print("", true, &mut output).unwrap();
-    println!("{}", output);
-
     let mut analysis_pipeline = AnalysisPipeline::standard();
     let sema_ctx = analysis_pipeline.run(&ast, &mut diag_ctxt);
-    sema_ctx.symbol_table.dump();
-    
 
     println!("\n=== LLVM IR ===");
     let context = Context::create();
@@ -48,25 +41,49 @@ def main() -> int {
     emitter.generate(&ast, &sema_ctx);
     emitter.dump_module();
 
+    let ctx = context::build_analysis_context(emitter.module());
     if !emitter.has_errors() {
-        println!("\n=== Dataflow Analysis (Live Variables) ===");
-        let cfgs = dataflow::build_cfg(&ast);
-        for (fn_name, cfg) in &cfgs {
-            let live = dataflow::compute_live_variables(cfg);
-            println!(
-                "fn {}: def={:?} use={:?} live_in={:?}",
-                fn_name, cfg.blocks[0].def, cfg.blocks[0].r#use, live[0]
-            );
+        println!("\n=== Live Variables ===");
+        for (fn_name, cfg) in &ctx.cfgs {
+            let live = live_variable::compute_live_variables(cfg);
+            println!("fn {}:", fn_name);
+            for block in &cfg.blocks {
+                if block.id == cfg.exit { continue; }
+                println!(
+                    "  block {}: def={:?} use={:?} live_in={:?} succ={:?}",
+                    block.id, block.def, block.r#use, live[block.id], block.successors
+                );
+            }
         }
 
-        println!("\n=== LLVM Optimization ===");
+        println!("\n=== Reaching Definitions ===");
+        for (fn_name, cfg) in &ctx.cfgs {
+            let reaching = reaching_definition::compute_reaching_definitions(cfg);
+            println!("fn {}:", fn_name);
+            for block in &cfg.blocks {
+                if block.id == cfg.exit { continue; }
+                println!("  block {} out: {:?}", block.id, reaching[block.id]);
+            }
+        }
+
+        println!("\n=== Available Expressions ===");
+        for (fn_name, cfg) in &ctx.cfgs {
+            if let Some(fdata) = ctx.func_data.get(fn_name) {
+                let analysis = available_expression::AvailableExpressionAnalysis::from_context(cfg, fdata);
+                let avail = available_expression::compute_available_expressions(cfg, &analysis);
+                println!("fn {}:", fn_name);
+                for block in &cfg.blocks {
+                    if block.id == cfg.exit { continue; }
+                    println!("  block {} out: {:?}", block.id, avail[block.id]);
+                }
+            }
+        }
+
         match emitter.optimize_llvm() {
             Ok(true) => println!("LLVM passes applied successfully"),
             Ok(false) => println!("LLVM passes completed (no changes)"),
             Err(e) => println!("LLVM optimization failed: {}", e),
         }
-        println!("=== Optimized LLVM IR ===");
-        emitter.dump_module();
 
         match JitRunner::new(emitter.module()) {
             Ok(runner) => unsafe {
@@ -77,6 +94,8 @@ def main() -> int {
             },
             Err(e) => eprintln!("JIT init failed: {}", e),
         }
-    }
+    };
+
+    live_variable::detect_unused_variables(&ctx.cfgs, &mut diag_ctxt);
     diag_ctxt.print_all(&mut std::io::stdout()).expect("");
 }
