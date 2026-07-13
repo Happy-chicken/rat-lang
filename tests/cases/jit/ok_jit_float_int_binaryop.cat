@@ -1,0 +1,18 @@
+// @pass
+// @jit: 30
+def main() -> int {
+    let a: int = 10;
+    let b: int = 20;
+    let x: int = a + b;
+    let y: int = x * 2;
+    let gt: bool = y > 50;
+
+    let f: float = 1.5;
+    let g: float = 2.5;
+    let fadd: float = f + g;
+    let fmul: float = f * 2.0;
+    let flt: bool = f < g;
+    let fneg: float = -f;
+
+    return x;
+}

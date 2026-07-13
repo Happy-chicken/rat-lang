@@ -1,11 +1,12 @@
 use inkwell::AddressSpace;
 use inkwell::IntPredicate;
+use inkwell::FloatPredicate;
 use inkwell::basic_block::BasicBlock;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::Module;
 use inkwell::types::{BasicType, BasicTypeEnum, StructType};
-use inkwell::values::{BasicValue, BasicValueEnum, IntValue, PointerValue};
+use inkwell::values::{BasicValue, BasicValueEnum, FloatValue, IntValue, PointerValue};
 use std::collections::HashMap;
 use std::cell::Cell;
 use crate::common::DiagCtxt;
@@ -1348,70 +1349,80 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
         rhs: BasicValueEnum<'ctx>,
         span: Span,
     ) -> BasicValueEnum<'ctx> {
-        let lhs_int = lhs.into_int_value();
-        let rhs_int = rhs.into_int_value();
-        let zero = self.context.i64_type().const_zero();
-        let zero_i1 = self.context.bool_type().const_zero();
-
-        let result: IntValue = match op {
-            BinaryOp::Add => self
-                .builder
-                .build_int_add(lhs_int, rhs_int, "add")
-                .unwrap_or(zero),
-            BinaryOp::Sub => self
-                .builder
-                .build_int_sub(lhs_int, rhs_int, "sub")
-                .unwrap_or(zero),
-            BinaryOp::Mul => self
-                .builder
-                .build_int_mul(lhs_int, rhs_int, "mul")
-                .unwrap_or(zero),
-            BinaryOp::Div => self
-                .builder
-                .build_int_signed_div(lhs_int, rhs_int, "div")
-                .unwrap_or(zero),
-            BinaryOp::Eq => self
-                .builder
-                .build_int_compare(IntPredicate::EQ, lhs_int, rhs_int, "eq")
-                .unwrap_or(zero_i1),
-            BinaryOp::NotEq => self
-                .builder
-                .build_int_compare(IntPredicate::NE, lhs_int, rhs_int, "ne")
-                .unwrap_or(zero_i1),
-            BinaryOp::Lt => self
-                .builder
-                .build_int_compare(IntPredicate::SLT, lhs_int, rhs_int, "lt")
-                .unwrap_or(zero_i1),
-            BinaryOp::Gt => self
-                .builder
-                .build_int_compare(IntPredicate::SGT, lhs_int, rhs_int, "gt")
-                .unwrap_or(zero_i1),
-            BinaryOp::Le => self
-                .builder
-                .build_int_compare(IntPredicate::SLE, lhs_int, rhs_int, "le")
-                .unwrap_or(zero_i1),
-            BinaryOp::Ge => self
-                .builder
-                .build_int_compare(IntPredicate::SGE, lhs_int, rhs_int, "ge")
-                .unwrap_or(zero_i1),
-            BinaryOp::And => self
-                .builder
-                .build_and(lhs_int, rhs_int, "and")
-                .unwrap_or(zero_i1),
-            BinaryOp::Or => self
-                .builder
-                .build_or(lhs_int, rhs_int, "or")
-                .unwrap_or(zero_i1),
+        match (lhs, rhs) {
+            (BasicValueEnum::IntValue(li), BasicValueEnum::IntValue(ri)) => {
+                self.binary_int(op, li, ri, span)
+            }
+            (BasicValueEnum::FloatValue(lf), BasicValueEnum::FloatValue(rf)) => {
+                self.binary_float(op, lf, rf, span)
+            }
             _ => {
                 let d = self
                     .diag
-                    .error(span, format!("unsupported binary op: {:?}", op))
+                    .error(span, "binary op on mismatched or unsupported types")
                     .build();
                 self.diag.emit(d);
-                lhs_int
+                self.context.i64_type().const_zero().into()
             }
+        }
+    }
+
+    fn binary_int(
+        &mut self,
+        op: &BinaryOp,
+        lhs: IntValue<'ctx>,
+        rhs: IntValue<'ctx>,
+        _span: Span,
+    ) -> BasicValueEnum<'ctx> {
+        let zero_int = self.context.i64_type().const_zero();
+        let zero_bool = self.context.bool_type().const_zero();
+        let cmp = |pred| self.builder.build_int_compare(pred, lhs, rhs, "cmp").unwrap_or(zero_bool);
+
+        let result: IntValue = match op {
+            BinaryOp::Add => self.builder.build_int_add(lhs, rhs, "add").unwrap_or(zero_int),
+            BinaryOp::Sub => self.builder.build_int_sub(lhs, rhs, "sub").unwrap_or(zero_int),
+            BinaryOp::Mul => self.builder.build_int_mul(lhs, rhs, "mul").unwrap_or(zero_int),
+            BinaryOp::Div => self.builder.build_int_signed_div(lhs, rhs, "div").unwrap_or(zero_int),
+            BinaryOp::Eq => cmp(IntPredicate::EQ),
+            BinaryOp::NotEq => cmp(IntPredicate::NE),
+            BinaryOp::Lt => cmp(IntPredicate::SLT),
+            BinaryOp::Gt => cmp(IntPredicate::SGT),
+            BinaryOp::Le => cmp(IntPredicate::SLE),
+            BinaryOp::Ge => cmp(IntPredicate::SGE),
+            BinaryOp::And => self.builder.build_and(lhs, rhs, "and").unwrap_or(zero_bool),
+            BinaryOp::Or => self.builder.build_or(lhs, rhs, "or").unwrap_or(zero_bool),
         };
         result.into()
+    }
+
+    fn binary_float(
+        &mut self,
+        op: &BinaryOp,
+        lhs: FloatValue<'ctx>,
+        rhs: FloatValue<'ctx>,
+        _span: Span,
+    ) -> BasicValueEnum<'ctx> {
+        let zero_f = self.context.f32_type().const_float(0.0);
+        let zero_bool = self.context.bool_type().const_zero();
+        let fcmp = |pred| {
+            self.builder
+                .build_float_compare(pred, lhs, rhs, "fcmp")
+                .unwrap_or(zero_bool)
+        };
+
+        match op {
+            BinaryOp::Add => self.builder.build_float_add(lhs, rhs, "fadd").unwrap_or(zero_f).into(),
+            BinaryOp::Sub => self.builder.build_float_sub(lhs, rhs, "fsub").unwrap_or(zero_f).into(),
+            BinaryOp::Mul => self.builder.build_float_mul(lhs, rhs, "fmul").unwrap_or(zero_f).into(),
+            BinaryOp::Div => self.builder.build_float_div(lhs, rhs, "fdiv").unwrap_or(zero_f).into(),
+            BinaryOp::Eq => fcmp(FloatPredicate::OEQ).into(),
+            BinaryOp::NotEq => fcmp(FloatPredicate::ONE).into(),
+            BinaryOp::Lt => fcmp(FloatPredicate::OLT).into(),
+            BinaryOp::Gt => fcmp(FloatPredicate::OGT).into(),
+            BinaryOp::Le => fcmp(FloatPredicate::OLE).into(),
+            BinaryOp::Ge => fcmp(FloatPredicate::OGE).into(),
+            BinaryOp::And | BinaryOp::Or => zero_bool.into(),
+        }
     }
 
     fn compile_unary(
@@ -1433,16 +1444,29 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
                 self.context.ptr_type(AddressSpace::default()).const_null().into()
             }
             UnaryOp::Deref => {
-                let ptr_val = self.compile_expr(expr).into_pointer_value();
-                let i64_ty: BasicTypeEnum = self.context.i64_type().into();
-                match self.builder.build_load(i64_ty, ptr_val, "deref") {
+                let compiled = self.compile_expr(expr);
+                let ptr_val = compiled.into_pointer_value();
+                let inner_ty = self.infer_lit_type(&expr.expr);
+                match self.builder.build_load(inner_ty, ptr_val, "deref") {
                     Ok(v) => v,
                     Err(_) => zero,
                 }
             }
             UnaryOp::Neg => {
-                let val = self.compile_expr(expr).into_int_value();
-                self.builder.build_int_neg(val, "neg").unwrap_or(val).into()
+                let val = self.compile_expr(expr);
+                match val {
+                    BasicValueEnum::IntValue(iv) => {
+                        self.builder.build_int_neg(iv, "neg").unwrap_or(iv).into()
+                    }
+                    BasicValueEnum::FloatValue(fv) => {
+                        self.builder.build_float_neg(fv, "fneg").unwrap_or(fv).into()
+                    }
+                    _ => {
+                        let d = self.diag.error(span, "negation requires numeric type").build();
+                        self.diag.emit(d);
+                        zero
+                    }
+                }
             }
             UnaryOp::Not => {
                 let val = self.compile_expr(expr).into_int_value();
