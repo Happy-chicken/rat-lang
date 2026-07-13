@@ -72,6 +72,11 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
         crate::midend::optimizer::run_llvm_optimizations(&self.module, "default<O2>")
     }
 
+    pub fn optimize_llvm_targeted(&self, passes: &str) -> Result<bool, String> {
+        crate::midend::optimizer::init_native_target();
+        crate::midend::optimizer::run_llvm_optimizations(&self.module, passes)
+    }
+
     pub fn module(&self) -> &Module<'ctx> {
         &self.module
     }
