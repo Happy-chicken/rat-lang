@@ -14,8 +14,8 @@ impl Pass for Mem2Reg {
     }
 
     fn run(&self, module: &Module) -> bool {
-        crate::midend::optimizer::init_native_target();
-        match crate::midend::optimizer::run_llvm_optimizations(module, "mem2reg") {
+        crate::midend::ir_optimizer::init_native_target();
+        match crate::midend::ir_optimizer::run_llvm_optimizations(module, "mem2reg") {
             Ok(changed) => changed,
             Err(e) => {
                 eprintln!("[mem2reg] failed: {}", e);

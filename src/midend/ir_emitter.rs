@@ -1,21 +1,21 @@
+use crate::common::DiagCtxt;
+use crate::common::span::Span;
+use crate::frontend::ast::Program;
+use crate::frontend::ast::{expr::*, item::*, stmt::*, typ::Type as AstType};
+use crate::frontend::sema_checker::sema_ctx::SemaCtxt;
 use inkwell::AddressSpace;
-use inkwell::IntPredicate;
 use inkwell::FloatPredicate;
+use inkwell::IntPredicate;
 use inkwell::basic_block::BasicBlock;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::Module;
 use inkwell::types::{BasicType, BasicTypeEnum, StructType};
 use inkwell::values::{BasicValue, BasicValueEnum, FloatValue, IntValue, PointerValue};
-use std::collections::HashMap;
 use std::cell::Cell;
-use crate::common::DiagCtxt;
-use crate::common::span::Span;
-use crate::frontend::ast::Program;
-use crate::frontend::ast::{expr::*, item::*, stmt::*, typ::Type as AstType};
-use crate::frontend::sema_checker::sema_ctx::SemaCtxt;
+use std::collections::HashMap;
 
-use super::env::{ClassInfo, Env, VarInfo, ListTypeRegistry};
+use super::env::{ClassInfo, Env, ListTypeRegistry, VarInfo};
 
 pub struct IrEmitter<'a, 'ctx> {
     context: &'ctx Context,
@@ -69,13 +69,13 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
     }
 
     pub fn optimize_llvm(&self) -> Result<bool, String> {
-        crate::midend::optimizer::init_native_target();
-        crate::midend::optimizer::run_llvm_optimizations(&self.module, "default<O2>")
+        crate::midend::ir_optimizer::init_native_target();
+        crate::midend::ir_optimizer::run_llvm_optimizations(&self.module, "default<O2>")
     }
 
     pub fn optimize_llvm_targeted(&self, passes: &str) -> Result<bool, String> {
-        crate::midend::optimizer::init_native_target();
-        crate::midend::optimizer::run_llvm_optimizations(&self.module, passes)
+        crate::midend::ir_optimizer::init_native_target();
+        crate::midend::ir_optimizer::run_llvm_optimizations(&self.module, passes)
     }
 
     pub fn module(&self) -> &Module<'ctx> {
@@ -120,13 +120,13 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
                         methods: HashMap::new(),
                     },
                 );
-            }
-            else if let Item::Impl(imp) = &item_node.item {
+            } else if let Item::Impl(imp) = &item_node.item {
                 let prefix = format!("{}_", imp.class_name);
                 for method in &imp.methods {
                     let mangled = format!("{}{}", prefix, method.function_header.name);
                     if let Some(info) = self.class_info.get_mut(&imp.class_name) {
-                        info.methods.insert(method.function_header.name.clone(), mangled);
+                        info.methods
+                            .insert(method.function_header.name.clone(), mangled);
                     }
                 }
             }
@@ -134,11 +134,11 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
     }
 
     fn build_class_constructors(&mut self) {
-        let class_data: Vec<(String, StructType<'ctx>, Vec<BasicTypeEnum<'ctx>>)> =
-            self.class_info
-                .iter()
-                .map(|(name, info)| (name.clone(), info.struct_ty, info.field_types.clone()))
-                .collect();
+        let class_data: Vec<(String, StructType<'ctx>, Vec<BasicTypeEnum<'ctx>>)> = self
+            .class_info
+            .iter()
+            .map(|(name, info)| (name.clone(), info.struct_ty, info.field_types.clone()))
+            .collect();
 
         for (name, struct_ty, field_tys) in class_data {
             self.compile_class_constructor(&name, struct_ty, &field_tys);
@@ -162,10 +162,7 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
         let entry = self.context.append_basic_block(function, "entry");
         self.builder.position_at_end(entry);
 
-        let alloca = self
-            .builder
-            .build_alloca(struct_ty, "ctor.tmp")
-            .unwrap();
+        let alloca = self.builder.build_alloca(struct_ty, "ctor.tmp").unwrap();
 
         for (i, _) in field_tys.iter().enumerate() {
             if let Some(param) = function.get_nth_param(i as u32) {
@@ -281,9 +278,7 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
             }
         };
 
-        let function = self
-            .module
-            .add_function(name, fn_type, None);
+        let function = self.module.add_function(name, fn_type, None);
         self.current_function = Some(function);
         let entry = self.context.append_basic_block(function, "entry");
         self.builder.position_at_end(entry);
@@ -387,7 +382,7 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
                                                 "init.field",
                                             )
                                             .unwrap_or(alloca);
-                                    let _ = self.builder.build_store(field_ptr, val);
+                                        let _ = self.builder.build_store(field_ptr, val);
                                     }
                                 }
                             }
@@ -575,10 +570,7 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
                                         Err(e) => {
                                             let d = self
                                                 .diag
-                                                .error(
-                                                    span,
-                                                    format!("ctor call failed: {}", e),
-                                                )
+                                                .error(span, format!("ctor call failed: {}", e))
                                                 .build();
                                             self.diag.emit(d);
                                             zero
@@ -587,10 +579,7 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
                                 } else {
                                     let d = self
                                         .diag
-                                        .error(
-                                            span,
-                                            format!("undefined function: {}", name),
-                                        )
+                                        .error(span, format!("undefined function: {}", name))
                                         .build();
                                     self.diag.emit(d);
                                     zero
@@ -951,7 +940,13 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
         if obj_val.is_pointer_value() {
             let i8_ty: BasicTypeEnum = self.context.i8_type().into();
             let elem_ptr = unsafe {
-                self.builder.build_gep(i8_ty, obj_val.into_pointer_value(), &[idx_int.into()], "str.idx")
+                self.builder
+                    .build_gep(
+                        i8_ty,
+                        obj_val.into_pointer_value(),
+                        &[idx_int.into()],
+                        "str.idx",
+                    )
                     .unwrap_or(obj_val.into_pointer_value())
             };
             return match self.builder.build_load(i8_ty, elem_ptr, "str.char") {
@@ -1114,7 +1109,10 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
                 val
             }
 
-            Expr::Unary { op: UnaryOp::Deref, expr: inner } => {
+            Expr::Unary {
+                op: UnaryOp::Deref,
+                expr: inner,
+            } => {
                 let ptr_val = self.compile_expr(inner).into_pointer_value();
                 let val = self.compile_expr(value);
                 let _ = self.builder.build_store(ptr_val, val);
@@ -1293,7 +1291,9 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
             Expr::Literal(Literal::Float(_)) => self.context.f32_type().into(),
             Expr::Literal(Literal::Bool(_)) => self.context.bool_type().into(),
             Expr::Literal(Literal::Char(_)) => self.context.i8_type().into(),
-            Expr::Literal(Literal::StringLiteral(_)) => self.context.ptr_type(AddressSpace::default()).into(),
+            Expr::Literal(Literal::StringLiteral(_)) => {
+                self.context.ptr_type(AddressSpace::default()).into()
+            }
             Expr::List { elements } => {
                 let inner = if elements.is_empty() {
                     self.context.i64_type().into()
@@ -1302,9 +1302,10 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
                 };
                 self.get_list_struct_type(inner).into()
             }
-            Expr::Unary { op: UnaryOp::AddrOf, .. } => {
-                self.context.ptr_type(AddressSpace::default()).into()
-            }
+            Expr::Unary {
+                op: UnaryOp::AddrOf,
+                ..
+            } => self.context.ptr_type(AddressSpace::default()).into(),
             _ => self.context.i64_type().into(),
         }
     }
@@ -1327,17 +1328,30 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
 
         let bytes: Vec<u8> = s.bytes().chain(std::iter::once(0)).collect();
         let ty = self.context.i8_type().array_type(bytes.len() as u32);
-        let global = self.module.add_global(ty, Some(AddressSpace::default()), &name);
-        global.set_initializer(&self.context.i8_type().const_array(
-            &bytes.iter().map(|&b| self.context.i8_type().const_int(b as u64, false)).collect::<Vec<_>>(),
-        ));
+        let global = self
+            .module
+            .add_global(ty, Some(AddressSpace::default()), &name);
+        global.set_initializer(
+            &self.context.i8_type().const_array(
+                &bytes
+                    .iter()
+                    .map(|&b| self.context.i8_type().const_int(b as u64, false))
+                    .collect::<Vec<_>>(),
+            ),
+        );
 
         let ptr = unsafe {
-            self.builder.build_gep(
-                ty, global.as_pointer_value(),
-                &[self.context.i64_type().const_zero().into(), self.context.i64_type().const_zero().into()],
-                &format!("{}.ptr", name),
-            ).unwrap_or(global.as_pointer_value())
+            self.builder
+                .build_gep(
+                    ty,
+                    global.as_pointer_value(),
+                    &[
+                        self.context.i64_type().const_zero().into(),
+                        self.context.i64_type().const_zero().into(),
+                    ],
+                    &format!("{}.ptr", name),
+                )
+                .unwrap_or(global.as_pointer_value())
         };
         ptr.into()
     }
@@ -1376,13 +1390,29 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
     ) -> BasicValueEnum<'ctx> {
         let zero_int = self.context.i64_type().const_zero();
         let zero_bool = self.context.bool_type().const_zero();
-        let cmp = |pred| self.builder.build_int_compare(pred, lhs, rhs, "cmp").unwrap_or(zero_bool);
+        let cmp = |pred| {
+            self.builder
+                .build_int_compare(pred, lhs, rhs, "cmp")
+                .unwrap_or(zero_bool)
+        };
 
         let result: IntValue = match op {
-            BinaryOp::Add => self.builder.build_int_add(lhs, rhs, "add").unwrap_or(zero_int),
-            BinaryOp::Sub => self.builder.build_int_sub(lhs, rhs, "sub").unwrap_or(zero_int),
-            BinaryOp::Mul => self.builder.build_int_mul(lhs, rhs, "mul").unwrap_or(zero_int),
-            BinaryOp::Div => self.builder.build_int_signed_div(lhs, rhs, "div").unwrap_or(zero_int),
+            BinaryOp::Add => self
+                .builder
+                .build_int_add(lhs, rhs, "add")
+                .unwrap_or(zero_int),
+            BinaryOp::Sub => self
+                .builder
+                .build_int_sub(lhs, rhs, "sub")
+                .unwrap_or(zero_int),
+            BinaryOp::Mul => self
+                .builder
+                .build_int_mul(lhs, rhs, "mul")
+                .unwrap_or(zero_int),
+            BinaryOp::Div => self
+                .builder
+                .build_int_signed_div(lhs, rhs, "div")
+                .unwrap_or(zero_int),
             BinaryOp::Eq => cmp(IntPredicate::EQ),
             BinaryOp::NotEq => cmp(IntPredicate::NE),
             BinaryOp::Lt => cmp(IntPredicate::SLT),
@@ -1411,10 +1441,26 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
         };
 
         match op {
-            BinaryOp::Add => self.builder.build_float_add(lhs, rhs, "fadd").unwrap_or(zero_f).into(),
-            BinaryOp::Sub => self.builder.build_float_sub(lhs, rhs, "fsub").unwrap_or(zero_f).into(),
-            BinaryOp::Mul => self.builder.build_float_mul(lhs, rhs, "fmul").unwrap_or(zero_f).into(),
-            BinaryOp::Div => self.builder.build_float_div(lhs, rhs, "fdiv").unwrap_or(zero_f).into(),
+            BinaryOp::Add => self
+                .builder
+                .build_float_add(lhs, rhs, "fadd")
+                .unwrap_or(zero_f)
+                .into(),
+            BinaryOp::Sub => self
+                .builder
+                .build_float_sub(lhs, rhs, "fsub")
+                .unwrap_or(zero_f)
+                .into(),
+            BinaryOp::Mul => self
+                .builder
+                .build_float_mul(lhs, rhs, "fmul")
+                .unwrap_or(zero_f)
+                .into(),
+            BinaryOp::Div => self
+                .builder
+                .build_float_div(lhs, rhs, "fdiv")
+                .unwrap_or(zero_f)
+                .into(),
             BinaryOp::Eq => fcmp(FloatPredicate::OEQ).into(),
             BinaryOp::NotEq => fcmp(FloatPredicate::ONE).into(),
             BinaryOp::Lt => fcmp(FloatPredicate::OLT).into(),
@@ -1425,12 +1471,7 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
         }
     }
 
-    fn compile_unary(
-        &mut self,
-        op: &UnaryOp,
-        expr: &ExprNode,
-        span: Span,
-    ) -> BasicValueEnum<'ctx> {
+    fn compile_unary(&mut self, op: &UnaryOp, expr: &ExprNode, span: Span) -> BasicValueEnum<'ctx> {
         let zero = self.context.i64_type().const_zero().into();
         match op {
             UnaryOp::AddrOf => {
@@ -1441,7 +1482,10 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
                 }
                 let d = self.diag.error(span, "& requires a variable").build();
                 self.diag.emit(d);
-                self.context.ptr_type(AddressSpace::default()).const_null().into()
+                self.context
+                    .ptr_type(AddressSpace::default())
+                    .const_null()
+                    .into()
             }
             UnaryOp::Deref => {
                 let compiled = self.compile_expr(expr);
@@ -1458,11 +1502,16 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
                     BasicValueEnum::IntValue(iv) => {
                         self.builder.build_int_neg(iv, "neg").unwrap_or(iv).into()
                     }
-                    BasicValueEnum::FloatValue(fv) => {
-                        self.builder.build_float_neg(fv, "fneg").unwrap_or(fv).into()
-                    }
+                    BasicValueEnum::FloatValue(fv) => self
+                        .builder
+                        .build_float_neg(fv, "fneg")
+                        .unwrap_or(fv)
+                        .into(),
                     _ => {
-                        let d = self.diag.error(span, "negation requires numeric type").build();
+                        let d = self
+                            .diag
+                            .error(span, "negation requires numeric type")
+                            .build();
                         self.diag.emit(d);
                         zero
                     }
@@ -1473,7 +1522,10 @@ impl<'a, 'ctx> IrEmitter<'a, 'ctx> {
                 self.builder.build_not(val, "not").unwrap_or(val).into()
             }
             _ => {
-                let d = self.diag.error(span, format!("unsupported unary op: {:?}", op)).build();
+                let d = self
+                    .diag
+                    .error(span, format!("unsupported unary op: {:?}", op))
+                    .build();
                 self.diag.emit(d);
                 zero
             }
