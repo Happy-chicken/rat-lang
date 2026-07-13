@@ -4,69 +4,130 @@ use inkwell::module::Module;
 use inkwell::values::{InstructionOpcode, Operand};
 
 use super::Pass;
-use crate::midend::analyzer::available_expression::{self, ExprSet};
-use crate::midend::analyzer::context::build_analysis_context;
-use crate::midend::analyzer::dataflow::DataflowSolver;
+use crate::midend::analyzer::dataflow;
 use crate::midend::analyzer::dominator;
 
-fn resolve_to_alloca_name(
-    operand: &Operand,
-    load_map: &HashMap<String, String>,
-) -> Option<String> {
-    match operand {
-        Operand::Value(v) => {
-            let name = v.get_name().to_str().unwrap_or("");
-            if name.is_empty() {
-                return None;
+fn operand_key(op: &Operand) -> Option<String> {
+    match op {
+        Operand::Value(v) => match *v {
+            inkwell::values::BasicValueEnum::IntValue(iv) => {
+                if let Some(c) = iv.get_zero_extended_constant() {
+                    return Some(format!("{}", c as i64));
+                }
+                let name = iv.get_name().to_str().unwrap_or("");
+                if !name.is_empty() {
+                    return Some(name.to_string());
+                }
+                Some(format!("{}", iv))
             }
-            load_map.get(name).cloned()
-        }
+            inkwell::values::BasicValueEnum::FloatValue(fv) => {
+                if let Some((val, _)) = fv.get_constant() {
+                    return Some(format!("{:.6}", val));
+                }
+                let name = fv.get_name().to_str().unwrap_or("");
+                if !name.is_empty() {
+                    return Some(name.to_string());
+                }
+                Some(format!("{}", fv))
+            }
+            _ => None,
+        },
         _ => None,
     }
 }
 
-fn make_expr_key(
-    instr: &inkwell::values::InstructionValue,
-    load_map: &HashMap<String, String>,
-) -> Option<String> {
-    let op_str = match instr.get_opcode() {
-        InstructionOpcode::Add => "add",
-        InstructionOpcode::Sub => "sub",
-        InstructionOpcode::Mul => "mul",
-        InstructionOpcode::SDiv => "sdiv",
-        InstructionOpcode::And => "and",
-        InstructionOpcode::Or => "or",
-        InstructionOpcode::Xor => "xor",
-        _ => return None,
-    };
-    let lhs = resolve_to_alloca_name(&instr.get_operand(0)?, load_map)?;
-    let rhs = resolve_to_alloca_name(&instr.get_operand(1)?, load_map)?;
+fn opcode_name(opcode: InstructionOpcode) -> Option<&'static str> {
+    match opcode {
+        InstructionOpcode::Add => Some("add"),
+        InstructionOpcode::Sub => Some("sub"),
+        InstructionOpcode::Mul => Some("mul"),
+        InstructionOpcode::SDiv => Some("sdiv"),
+        InstructionOpcode::FAdd => Some("fadd"),
+        InstructionOpcode::FSub => Some("fsub"),
+        InstructionOpcode::FMul => Some("fmul"),
+        InstructionOpcode::FDiv => Some("fdiv"),
+        InstructionOpcode::And => Some("and"),
+        InstructionOpcode::Or => Some("or"),
+        InstructionOpcode::Xor => Some("xor"),
+        _ => None,
+    }
+}
+
+fn make_expr_key(instr: &inkwell::values::InstructionValue) -> Option<String> {
+    let op_str = opcode_name(instr.get_opcode())?;
+    let lhs = operand_key(&instr.get_operand(0)?)?;
+    let rhs = operand_key(&instr.get_operand(1)?)?;
     Some(format!("{}({},{})", op_str, lhs, rhs))
 }
 
-fn compute_avail_in(cfg: &crate::midend::analyzer::dataflow::Cfg, avail_out: &[ExprSet]) -> Vec<ExprSet> {
-    let n = cfg.blocks.len();
-    let mut avail_in = vec![ExprSet::new(); n];
+fn build_ssa_cfg(func: &inkwell::values::FunctionValue) -> (dataflow::Cfg, usize) {
+    use std::collections::BTreeSet;
+    use inkwell::basic_block::BasicBlock;
 
-    for b in 0..n {
-        if b == cfg.entry {
-            continue;
+    let basic_blocks: Vec<BasicBlock> = func.get_basic_blocks();
+    let n = basic_blocks.len();
+    let exit_idx = n;
+
+    let bb_to_idx: HashMap<BasicBlock, usize> = basic_blocks
+        .iter()
+        .enumerate()
+        .map(|(i, bb)| (*bb, i))
+        .collect();
+
+    let mut blocks = Vec::with_capacity(n + 1);
+
+    for (i, bb) in basic_blocks.iter().enumerate() {
+        let mut def = BTreeSet::new();
+        for instr in bb.get_instructions() {
+            if let Some(name) = instr.get_name() {
+                if let Ok(n) = name.to_str() {
+                    if !n.is_empty() {
+                        def.insert(n.to_string());
+                    }
+                }
+            }
         }
-        let pred_out: Vec<&ExprSet> = (0..n)
-            .filter(|&p| cfg.blocks[p].successors.contains(&b))
-            .map(|p| &avail_out[p])
-            .collect();
-        if pred_out.is_empty() {
-            continue;
-        }
-        let mut result = pred_out[0].clone();
-        for s in &pred_out[1..] {
-            result = result.intersection(s).cloned().collect();
-        }
-        avail_in[b] = result;
+
+        let successors = if let Some(terminator) = bb.get_terminator() {
+            let mut succs = Vec::new();
+            for i in 0..terminator.get_num_operands() {
+                if let Some(Operand::Block(succ_bb)) = terminator.get_operand(i) {
+                    if let Some(&idx) = bb_to_idx.get(&succ_bb) {
+                        succs.push(idx);
+                    }
+                }
+            }
+            if succs.is_empty() {
+                vec![exit_idx]
+            } else {
+                succs
+            }
+        } else {
+            vec![exit_idx]
+        };
+
+        blocks.push(dataflow::BlockInfo {
+            id: i,
+            def,
+            r#use: BTreeSet::new(),
+            successors,
+        });
     }
 
-    avail_in
+    blocks.push(dataflow::BlockInfo {
+        id: exit_idx,
+        def: BTreeSet::new(),
+        r#use: BTreeSet::new(),
+        successors: vec![],
+    });
+
+    let cfg = dataflow::Cfg {
+        blocks,
+        entry: 0,
+        exit: exit_idx,
+    };
+
+    (cfg, n)
 }
 
 pub struct CommonSubexpressionElimination;
@@ -77,11 +138,10 @@ impl Pass for CommonSubexpressionElimination {
     }
 
     fn description(&self) -> &'static str {
-        "global CSE: dominator-tree propagation filtered by available expressions"
+        "global CSE on SSA: dominator-tree value propagation"
     }
 
     fn run(&self, module: &Module) -> bool {
-        let analysis_ctx = build_analysis_context(module);
         let mut changed = false;
 
         for func in module.get_functions() {
@@ -92,28 +152,18 @@ impl Pass for CommonSubexpressionElimination {
             if fn_name.starts_with("llvm.") {
                 continue;
             }
-            let cfg = match analysis_ctx.cfgs.get(&fn_name) {
-                Some(c) => c,
-                None => continue,
-            };
-            let fdata = match analysis_ctx.func_data.get(&fn_name) {
-                Some(d) => d,
-                None => continue,
-            };
 
-            let avail = available_expression::AvailableExpressionAnalysis::from_context(cfg, fdata);
-            let avail_out = DataflowSolver::new(cfg, &avail).solve();
-            let avail_in = compute_avail_in(cfg, &avail_out);
-            let dom = dominator::compute_dominators(cfg);
-            let idom = dominator::compute_idom(cfg, &dom);
-            let rpo = dominator::compute_rpo(cfg);
+            let (cfg, num_real_blocks) = build_ssa_cfg(&func);
+            let dom = dominator::compute_dominators(&cfg);
+            let idom = dominator::compute_idom(&cfg, &dom);
+            let rpo = dominator::compute_rpo(&cfg);
 
             let bb_list = func.get_basic_blocks();
             let mut block_tables: Vec<HashMap<String, inkwell::values::IntValue>> =
                 vec![HashMap::new(); cfg.blocks.len()];
 
             for &b in &rpo {
-                if b == cfg.exit || b >= bb_list.len() {
+                if b == cfg.exit || b >= num_real_blocks {
                     continue;
                 }
 
@@ -124,12 +174,10 @@ impl Pass for CommonSubexpressionElimination {
                     HashMap::new()
                 };
 
-                table.retain(|expr, _| b < avail_in.len() && avail_in[b].contains(expr));
-
                 if let Some(bb) = bb_list.get(b) {
                     let instructions: Vec<_> = bb.get_instructions().collect();
                     for instr in &instructions {
-                        let key = match make_expr_key(instr, &fdata.load_to_alloca) {
+                        let key = match make_expr_key(instr) {
                             Some(k) => k,
                             None => continue,
                         };
