@@ -5,6 +5,9 @@ use super::dataflow::{BlockInfo, Cfg, DataflowAnalysis, DataflowSolver, Directio
 
 pub type ExprSet = BTreeSet<String>;
 
+/// check whether a expr string uses a defined variablle
+/// if any operands in defs: true (expr is killed)
+/// if all operands are not in defs: false (expr is alive)
 fn expr_uses_any_def(expr: &str, def: &BTreeSet<String>) -> bool {
     let inner = match expr.find('(') {
         Some(i) => &expr[i + 1..expr.len() - 1],

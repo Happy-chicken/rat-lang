@@ -1,6 +1,6 @@
 pub mod const_fold;
 pub mod cse;
-pub mod dce;
+// pub mod dce;
 pub mod mem2reg;
 
 use inkwell::module::Module;

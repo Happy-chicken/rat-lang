@@ -9,32 +9,23 @@ use frontend::lexer::Lexer;
 use frontend::parser::Parser;
 use frontend::sema_checker::AnalysisPipeline;
 use inkwell::context::Context;
+use midend::ast_optimizer;
 use midend::ir_emitter::IrEmitter;
-use midend::optimizer::passes::{self, PassManager};
+use midend::optimizer::passes::{self, PassManager as LlvmPassManager};
+
+use crate::frontend::ast::printer::AstPrint;
 
 fn main() {
     let src = r#"
 def main() -> int {
-    let a: int = 10;
-    let b: int = 20;
+    let a: int = 10 * 1;
+    let b: int = 0 + 20;
     let x: int = a + b;
     let y: int = x * 2;
-    let gt: bool = y > 50;
-    if gt {
-        let aa = a+b;
-        let z: int = (a+b) - 5;
-    } else {
-        let z: int = y + 5;
+    if  true {
+        return 1;
     }
-
-    let f: float = 1.5;
-    let g: float = 2.5;
-    let fadd: float = f + g;
-    let fmul: float = f * 2.0;
-    let flt: bool = f < g;
-    let fneg: float = -f;
-
-    return x;
+    return 0;
 }
     "#;
     let file = SourceFile::new("main.rat".to_string(), src.to_string());
@@ -43,15 +34,26 @@ def main() -> int {
 
     let lexer = Lexer::new(&file.src);
     let mut parser = Parser::new(lexer, &mut diag_ctxt);
-    let ast = parser.parse_program();
+    let mut ast = parser.parse_program();
+    let mut out = String::new();
+    ast.print("", true, &mut out).unwrap();
+    println!("{}", out);
 
     let mut analysis_pipeline = AnalysisPipeline::standard();
     let sema_ctx = analysis_pipeline.run(&ast, &mut diag_ctxt);
 
-    let mut pm = PassManager::new();
+    let ast_pm = ast_optimizer::PassManager::standard();
+    let changes = ast_pm.run(&mut ast);
+    println!("\nAST optimizations: {} changes", changes);
+
+    out.clear();
+    ast.print("", true, &mut out).unwrap();
+    println!("After AST opt:\n{}", out);
+
+    let mut pm = LlvmPassManager::new();
     pm.add_pass(Box::new(passes::mem2reg::Mem2Reg));
-    pm.add_pass(Box::new(passes::const_fold::ConstantFolding));
     pm.add_pass(Box::new(passes::cse::CommonSubexpressionElimination));
+    pm.add_pass(Box::new(passes::const_fold::ConstantFolding));
 
     {
         let context = Context::create();
