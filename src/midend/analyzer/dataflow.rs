@@ -26,6 +26,11 @@ pub struct Cfg {
     pub exit: usize,
 }
 
+impl Cfg {
+    pub fn size(&self) -> usize {
+        self.blocks.len() - 1 // Exclude the exit block from size
+    }
+}
 pub enum Direction {
     Forward,  // Forward analysis (e.g., Reaching Definitions)
     Backward, // Backward analysis (e.g., Live Variables)

@@ -23,7 +23,7 @@ impl<'a> DataflowAnalysis for DominatorAnalysis<'a> {
     }
 
     fn initial_state(&self) -> Self::State {
-        let all: BTreeSet<usize> = (0..self.cfg.blocks.len()).collect();
+        let all: BTreeSet<usize> = (0..self.cfg.size()).collect();
         all
     }
 
@@ -62,13 +62,14 @@ pub fn compute_dominators(cfg: &Cfg) -> Vec<BTreeSet<usize>> {
 
 /// optimization
 fn compute_postorder(cfg: &Cfg) -> Vec<usize> {
-    let n = cfg.blocks.len();
+    let n = cfg.size();
     let mut visited = vec![false; n];
     let mut order = Vec::with_capacity(n);
 
     fn dfs(node: usize, cfg: &Cfg, visited: &mut [bool], order: &mut Vec<usize>) {
         visited[node] = true;
         for &succ in &cfg.blocks[node].successors {
+            if succ == cfg.exit { continue; }
             if !visited[succ] {
                 dfs(succ, cfg, visited, order);
             }
@@ -118,7 +119,7 @@ fn intersect(
 /// That is: idom(n) = the "largest" element in the set of strict dominators
 /// 快速计算直接支配者（基于 RPO + intersect）
 pub fn compute_idom_fast(cfg: &Cfg) -> Vec<Option<usize>> {
-    let n = cfg.blocks.len();
+    let n = cfg.size();
     let entry = cfg.entry;
 
     let postorder = compute_postorder(cfg);
@@ -163,7 +164,7 @@ pub fn compute_idom_fast(cfg: &Cfg) -> Vec<Option<usize>> {
 
 /// 从 idom 构建完整支配集
 pub fn compute_dominators_fast(cfg: &Cfg, idom: &[Option<usize>]) -> Vec<BTreeSet<usize>> {
-    let n = cfg.blocks.len();
+    let n = cfg.size();
     let entry = cfg.entry;
     let mut dom = vec![BTreeSet::new(); n];
     dom[entry].insert(entry);
@@ -199,7 +200,7 @@ pub fn compute_dominators_fast(cfg: &Cfg, idom: &[Option<usize>]) -> Vec<BTreeSe
 /// Equivalently: x ∈ DF[n] iff ∃p ∈ preds(x) such that n dominates p
 ///               but n does not dominate x (except possibly x = n).
 pub fn compute_dominance_frontier(cfg: &Cfg, dom: &[BTreeSet<usize>]) -> Vec<BTreeSet<usize>> {
-    let n = cfg.blocks.len();
+    let n = cfg.size();
     let mut df = vec![BTreeSet::new(); n];
 
     for x in 0..n {
@@ -260,7 +261,7 @@ pub fn compute_iterated_dominance_frontier(
 
 /// build dominator tree children from immediate dominators
 pub fn compute_dom_tree_children(cfg: &Cfg, idom: &[Option<usize>]) -> Vec<Vec<usize>> {
-    let n = cfg.blocks.len();
+    let n = cfg.size();
     let mut children = vec![Vec::new(); n];
     for i in 0..n {
         if i == cfg.entry {

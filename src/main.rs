@@ -69,6 +69,7 @@ def main() -> int {
         let cfg = midend::analyzer::dataflow::build_dummy_cfg();
         let idom = midend::analyzer::dominator::compute_idom_fast(&cfg);
         let dom = midend::analyzer::dominator::compute_dominators_fast(&cfg, &idom);
+        let child = midend::analyzer::dominator::compute_dom_tree_children(&cfg, &idom);
         for block in &cfg.blocks {
             if block.id == cfg.exit { continue; }
             println!(
@@ -76,8 +77,8 @@ def main() -> int {
                 block.id, block.successors, dom[block.id]
             );
         }
-        println!("Immediate dominators: {:#?}", idom);
-        
+        // println!("Immediate dominators: {:#?}", idom);
+        println!("Dominance tree children: {:#?}", child);
 
         let changes = pm.run_until_fixed_point(emitter.module(), 1);
         println!("=== After opt ({} changes) ===", changes);
