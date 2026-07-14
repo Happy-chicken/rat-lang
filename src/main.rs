@@ -67,7 +67,8 @@ def main() -> int {
 
     if !emitter.has_errors() {
         let cfg = midend::analyzer::dataflow::build_dummy_cfg();
-        let dom = midend::analyzer::dominator::compute_dominators_fast(&cfg);
+        let idom = midend::analyzer::dominator::compute_idom_fast(&cfg);
+        let dom = midend::analyzer::dominator::compute_dominators_fast(&cfg, &idom);
         for block in &cfg.blocks {
             if block.id == cfg.exit { continue; }
             println!(
@@ -75,6 +76,7 @@ def main() -> int {
                 block.id, block.successors, dom[block.id]
             );
         }
+        println!("Immediate dominators: {:#?}", idom);
         
 
         let changes = pm.run_until_fixed_point(emitter.module(), 1);

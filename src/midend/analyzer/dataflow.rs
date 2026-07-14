@@ -37,37 +37,37 @@ pub fn build_dummy_cfg() -> Cfg {
             id: 0,
             def: Vec::new().into_iter().collect(),
             r#use: Vec::new().into_iter().collect(),
-            successors: vec![1],
+            successors: vec![1,4],
         },
         BlockInfo {
             id: 1,
             def: Vec::new().into_iter().collect(),
             r#use: Vec::new().into_iter().collect(),
-            successors: vec![2,5],
+            successors: vec![2, 3],
         },
         BlockInfo {
             id: 2,
             def: Vec::new().into_iter().collect(),
             r#use: Vec::new().into_iter().collect(),
-            successors: vec![3],
+            successors: vec![5],
         },
         BlockInfo {
             id: 3,
             def: Vec::new().into_iter().collect(),
             r#use: Vec::new().into_iter().collect(),
-            successors: vec![4],
+            successors: vec![5],
         },
         BlockInfo {
             id: 4,
             def: Vec::new().into_iter().collect(),
             r#use: Vec::new().into_iter().collect(),
-            successors: vec![9],
+            successors: vec![6],
         },
         BlockInfo {
             id: 5,
             def: Vec::new().into_iter().collect(),
             r#use: Vec::new().into_iter().collect(),
-            successors: vec![6,8],
+            successors: vec![6],
         },
         BlockInfo {
             id: 6,
@@ -79,18 +79,6 @@ pub fn build_dummy_cfg() -> Cfg {
             id: 7,
             def: Vec::new().into_iter().collect(),
             r#use: Vec::new().into_iter().collect(),
-            successors: vec![3],
-        },
-        BlockInfo {
-            id: 8,
-            def: Vec::new().into_iter().collect(),
-            r#use: Vec::new().into_iter().collect(),
-            successors: vec![7],
-        },
-        BlockInfo {
-            id: 9,
-            def: Vec::new().into_iter().collect(),
-            r#use: Vec::new().into_iter().collect(),
             successors: vec![],
         },
     ];
@@ -98,7 +86,7 @@ pub fn build_dummy_cfg() -> Cfg {
     Cfg {
         blocks,
         entry: 0,
-        exit: 9,
+        exit: 7,
     }
 }
 

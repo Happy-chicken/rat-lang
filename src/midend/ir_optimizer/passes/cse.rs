@@ -154,8 +154,8 @@ impl Pass for CommonSubexpressionElimination {
             }
 
             let (cfg, num_real_blocks) = build_ssa_cfg(&func);
-            let dom = dominator::compute_dominators(&cfg);
-            let idom = dominator::compute_idom(&cfg, &dom);
+            // let dom = dominator::compute_dominators(&cfg);
+            let idom = dominator::compute_idom_fast(&cfg);
             let rpo = dominator::compute_rpo(&cfg);
 
             let bb_list = func.get_basic_blocks();

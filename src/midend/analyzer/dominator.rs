@@ -105,104 +105,6 @@ fn intersect(
     finger1
 }
 
-/// 使用 RPO 加速的 Lengauer-Tarjan 风格算法，先计算 idom，再构造完整支配集。
-pub fn compute_dominators_fast(cfg: &Cfg) -> Vec<BTreeSet<usize>> {
-    let n = cfg.blocks.len();
-    let entry = cfg.entry;
-
-    // 1. 获取后序编号（用于 intersect 中的比较）
-    let postorder = compute_postorder(cfg);
-    let mut po_idx = vec![0; n];
-    for (i, &node) in postorder.iter().enumerate() {
-        po_idx[node] = i;
-    }
-
-    // 2. 获取反向后序（用于节点访问顺序）
-    let rpo = compute_rpo(cfg);
-
-    // 3. 直接支配者数组，None 表示尚未计算（Undefined）
-    let mut idom: Vec<Option<usize>> = vec![None; n];
-    idom[entry] = Some(entry); // 入口的直接支配者是自己
-
-    // 4. 迭代至不动点
-    let mut changed = true;
-    while changed {
-        changed = false;
-        for &b in &rpo {
-            // 跳过入口块
-            if b == entry {
-                continue;
-            }
-            // find the first predecessor of b that has a defined idom
-            let preds: Vec<usize> = (0..n)
-                .filter(|&p| cfg.blocks[p].successors.contains(&b))
-                .collect();
-            let mut new_idom = None;
-            for &p in &preds {
-                if idom[p].is_some() {
-                    new_idom = Some(p);
-                    break;
-                }
-            }
-
-            if let Some(mut curr_idom) = new_idom {
-                for &p in &preds {
-                    if Some(p) == new_idom {
-                        continue; // 跳过已选择的第一个
-                    }
-                    // for all other predecessors p of b, if idom[p] is defined, intersect with curr_idom
-                    if let Some(_) = idom[p] {
-                        curr_idom = intersect(p, curr_idom, &idom, &po_idx);
-                    }
-                }
-                if idom[b] != Some(curr_idom) {
-                    idom[b] = Some(curr_idom);
-                    changed = true;
-                }
-            } else {
-                // 没有前驱已定义（不可达块），idom 保持 None，之后支配集会设为全集
-            }
-        }
-    }
-
-    // 5. 从 idom 构建完整支配集
-    let mut dom: Vec<BTreeSet<usize>> = vec![BTreeSet::new(); n];
-    // 入口支配集
-    dom[entry].insert(entry);
-
-    // 对每个节点，沿 idom 链向上收集直至入口
-    for i in 0..n {
-        if i == entry || idom[i].is_none() {
-            continue;
-        }
-        let mut curr = i;
-        // 先加入自己
-        dom[i].insert(i);
-        // 沿着 idom 向上收集（入口的 idom 是 entry，集合不重复）
-        while curr != entry {
-            if let Some(p) = idom[curr] {
-                if p == curr {
-                    break;
-                }
-                dom[i].insert(p);
-                curr = p;
-            } else {
-                break;
-            }
-        }
-    }
-
-    // 不可达节点（idom 为 None）支配集设为全集
-    let all: BTreeSet<usize> = (0..n).collect();
-    for i in 0..n {
-        if i != entry && idom[i].is_none() {
-            dom[i] = all.clone();
-        }
-    }
-
-    dom
-}
-
 /// compute immediate dominator (IDom) for each node
 /// 
 /// Immediate dominator definition: the closest dominator in the dominator tree
@@ -214,29 +116,80 @@ pub fn compute_dominators_fast(cfg: &Cfg) -> Vec<BTreeSet<usize>> {
 /// 
 /// In the set of strict dominators, find the node that dominates all other strict dominators
 /// That is: idom(n) = the "largest" element in the set of strict dominators
-pub fn compute_idom(cfg: &Cfg, dom: &[BTreeSet<usize>]) -> Vec<Option<usize>> {
+/// 快速计算直接支配者（基于 RPO + intersect）
+pub fn compute_idom_fast(cfg: &Cfg) -> Vec<Option<usize>> {
     let n = cfg.blocks.len();
-    let mut idom = vec![None; n];
+    let entry = cfg.entry;
 
-    for i in 0..n {
-        if i == cfg.entry {
-            continue;
-        }
-        let strict_dom: BTreeSet<usize> = dom[i].iter().filter(|&&d| d != i).copied().collect();
+    let postorder = compute_postorder(cfg);
+    let mut po_idx = vec![0; n];
+    for (i, &node) in postorder.iter().enumerate() {
+        po_idx[node] = i;
+    }
 
-        for &d in &strict_dom {
-            let dominates_all: bool = strict_dom
-                .iter()
-                .all(|&other| other == d || dom[other].contains(&d));
-            if dominates_all {
-                idom[i] = Some(d);
-                break;
+    let rpo = compute_rpo(cfg);
+    let mut idom: Vec<Option<usize>> = vec![None; n];
+    idom[entry] = Some(entry);
+
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for &b in &rpo {
+            if b == entry { continue; }
+            let preds: Vec<usize> = (0..n)
+                .filter(|&p| cfg.blocks[p].successors.contains(&b))
+                .collect();
+
+            let mut new_idom = None;
+            for &p in &preds {
+                if idom[p].is_some() { new_idom = Some(p); break; }
+            }
+            if let Some(mut curr_idom) = new_idom {
+                for &p in &preds {
+                    if Some(p) == new_idom { continue; }
+                    if idom[p].is_some() {
+                        curr_idom = intersect(curr_idom, p, &idom, &po_idx);
+                    }
+                }
+                if idom[b] != Some(curr_idom) {
+                    idom[b] = Some(curr_idom);
+                    changed = true;
+                }
             }
         }
     }
-
     idom
 }
+
+/// 从 idom 构建完整支配集
+pub fn compute_dominators_fast(cfg: &Cfg, idom: &[Option<usize>]) -> Vec<BTreeSet<usize>> {
+    let n = cfg.blocks.len();
+    let entry = cfg.entry;
+    let mut dom = vec![BTreeSet::new(); n];
+    dom[entry].insert(entry);
+
+    for i in 0..n {
+        if i == entry || idom[i].is_none() { continue; }
+        dom[i].insert(i);
+        let mut curr = i;
+        while curr != entry {
+            if let Some(p) = idom[curr] {
+                if p == curr { break; }
+                dom[i].insert(p);
+                curr = p;
+            } else { break; }
+        }
+    }
+
+    let all: BTreeSet<usize> = (0..n).collect();
+    for i in 0..n {
+        if i != entry && idom[i].is_none() {
+            dom[i] = all.clone();
+        }
+    }
+    dom
+}
+
 
 /// compute dominance frontier for each node
 ///
