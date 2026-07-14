@@ -31,6 +31,77 @@ pub enum Direction {
     Backward, // Backward analysis (e.g., Live Variables)
 }
 
+pub fn build_dummy_cfg() -> Cfg {
+    let blocks = vec![
+        BlockInfo {
+            id: 0,
+            def: Vec::new().into_iter().collect(),
+            r#use: Vec::new().into_iter().collect(),
+            successors: vec![1],
+        },
+        BlockInfo {
+            id: 1,
+            def: Vec::new().into_iter().collect(),
+            r#use: Vec::new().into_iter().collect(),
+            successors: vec![2,5],
+        },
+        BlockInfo {
+            id: 2,
+            def: Vec::new().into_iter().collect(),
+            r#use: Vec::new().into_iter().collect(),
+            successors: vec![3],
+        },
+        BlockInfo {
+            id: 3,
+            def: Vec::new().into_iter().collect(),
+            r#use: Vec::new().into_iter().collect(),
+            successors: vec![4],
+        },
+        BlockInfo {
+            id: 4,
+            def: Vec::new().into_iter().collect(),
+            r#use: Vec::new().into_iter().collect(),
+            successors: vec![9],
+        },
+        BlockInfo {
+            id: 5,
+            def: Vec::new().into_iter().collect(),
+            r#use: Vec::new().into_iter().collect(),
+            successors: vec![6,8],
+        },
+        BlockInfo {
+            id: 6,
+            def: Vec::new().into_iter().collect(),
+            r#use: Vec::new().into_iter().collect(),
+            successors: vec![7],
+        },
+        BlockInfo {
+            id: 7,
+            def: Vec::new().into_iter().collect(),
+            r#use: Vec::new().into_iter().collect(),
+            successors: vec![3],
+        },
+        BlockInfo {
+            id: 8,
+            def: Vec::new().into_iter().collect(),
+            r#use: Vec::new().into_iter().collect(),
+            successors: vec![7],
+        },
+        BlockInfo {
+            id: 9,
+            def: Vec::new().into_iter().collect(),
+            r#use: Vec::new().into_iter().collect(),
+            successors: vec![],
+        },
+    ];
+
+    Cfg {
+        blocks,
+        entry: 0,
+        exit: 9,
+    }
+}
+
 // ============================================================================
 // 2. Trait Definition: Abstract interface for dataflow analysis
 // ============================================================================
